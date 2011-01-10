@@ -75,6 +75,7 @@ struct _GstKenburns {
   /* < private > */
   gint32 src_width, src_height;
   gint32 dst_width, dst_height;
+  gint32 border;
   GstVideoFormat src_fmt, dst_fmt;
 
   // The starting and ending zoom factors are expressed as a fraction of the

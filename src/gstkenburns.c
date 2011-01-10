@@ -75,6 +75,7 @@ output will look more smooth.
 #define DEFAULT_INTERP_METHOD GST_KENBURNS_INTERP_METHOD_NEAREST
 #define DEFAULT_PAN_METHOD    GST_KENBURNS_PAN_METHOD_VELOCITY_RAMP
 #define DEFAULT_PAN_ACCEL     0.5
+#define DEFAULT_BORDER   0
 
 /* GstKenburns properties */
 enum
@@ -90,6 +91,7 @@ enum
   PROP_INTERP_METHOD,
   PROP_PAN_METHOD,
   PROP_PAN_ACCEL,
+  PROP_BORDER,
   /* FILL ME */
 };
 
@@ -264,7 +266,9 @@ static void scale_and_crop_i420(GstKenburns *kb,
       xsrc = x0 + (xdst + 0.5) * zx;
       ysrc = y0 + (ydst + 0.5) * zy;
       if(xsrc < 0 || xsrc >= kb->src_width || 
-	 ysrc < 0 || ysrc >= kb->src_height) {
+	 ysrc < 0 || ysrc >= kb->src_height ||
+	 xdst < kb->border || xdst >= kb->dst_width  - kb->border ||
+	 ydst < kb->border || ydst >= kb->dst_height - kb->border) {
 	// use black if requesting a pixel that is out of bounds
 	Y  = 0;
 	U = 128;
@@ -310,7 +314,9 @@ static void scale_and_crop_ayuv(GstKenburns *kb,
       pos_src = xsrc*4 + ysrc * src_stride;
 
       if(xsrc < 0 || xsrc >= kb->src_width || 
-	 ysrc < 0 || ysrc >= kb->src_height) {
+	 ysrc < 0 || ysrc >= kb->src_height ||
+	 xdst < kb->border || xdst >= kb->dst_width  - kb->border ||
+	 ydst < kb->border || ydst >= kb->dst_height - kb->border) {
 	// use transparent black if requesting a pixel that is out of bounds
 	memset(dst + pos_dst, 0, 4);
       } else {
@@ -438,6 +444,9 @@ gst_kenburns_set_property (GObject * object, guint prop_id,
     case PROP_PAN_ACCEL:
       kb->pan_accel = g_value_get_double(value);
       break;
+    case PROP_BORDER:
+      kb->border = g_value_get_int(value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -480,6 +489,9 @@ gst_kenburns_get_property (GObject * object, guint prop_id, GValue * value,
       break;
     case PROP_PAN_ACCEL:
       g_value_set_double(value, kb->pan_accel);
+      break;
+    case PROP_BORDER:
+      g_value_set_int(value, kb->border);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -556,6 +568,10 @@ gst_kenburns_class_init (GstKenburnsClass * klass)
   g_object_class_install_property (gobject_class, PROP_PAN_ACCEL,
       g_param_spec_double ("pan-accel", "Panning Acceleration", "0.0 means constant velocity and 1.0 is the max acceleration. Only valid when not in linear panning mode.",
 			   0.0, 1.0, DEFAULT_PAN_ACCEL,
+			   G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_BORDER,
+      g_param_spec_int ("border", "Frame border on output image", "Number of pixels to use as a border around the output image.",
+			   0, G_MAXINT32, DEFAULT_BORDER,
 			   G_PARAM_READWRITE));
 
   trans_class->set_caps       = GST_DEBUG_FUNCPTR (gst_kenburns_set_caps);
