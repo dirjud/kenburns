@@ -258,9 +258,10 @@ static void scale_and_crop_i420(GstKenburns *kb,
   src_offsetU = gst_video_format_get_component_offset(kb->src_fmt, 1, kb->src_width, kb->src_height);
   src_offsetV = gst_video_format_get_component_offset(kb->src_fmt, 2, kb->src_width, kb->src_height);
 
-  double zx = (x1-x0) / (kb->dst_width -1);
-  double zy = (y1-y0) / (kb->dst_height-1);
+  double zx = (x1-x0) / (kb->dst_width);
+  double zy = (y1-y0) / (kb->dst_height);
 
+  printf("x0=%g x1=%g zx=%g\n", x0, x1, zx);
   for(ydst=0; ydst < kb->dst_height; ydst++) {
     for(xdst=0; xdst < kb->dst_width; xdst++) {
       xsrc = x0 + (xdst + 0.5) * zx;
@@ -302,8 +303,8 @@ static void scale_and_crop_ayuv(GstKenburns *kb,
   dst_stride = gst_video_format_get_row_stride(kb->dst_fmt, 0, kb->dst_width);
   src_stride = gst_video_format_get_row_stride(kb->src_fmt, 0, kb->src_width);
 
-  double zx = (x1-x0) / (kb->dst_width -1);
-  double zy = (y1-y0) / (kb->dst_height-1);
+  double zx = (x1-x0) / (kb->dst_width );
+  double zy = (y1-y0) / (kb->dst_height);
 
   for(ydst=0; ydst < kb->dst_height; ydst++) {
     for(xdst=0; xdst < kb->dst_width; xdst++) {
