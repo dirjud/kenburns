@@ -1,0 +1,6 @@
+This implements a kenburns gstreamer element.
+
+kenburns is a keyword for the Ken Burns effect
+(http://en.wikipedia.org/wiki/Ken_burns_effect) named after Ken
+Burns. It zooms and pans in a slow effect that really pulls focus into
+the image.
