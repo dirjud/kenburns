@@ -261,7 +261,6 @@ static void scale_and_crop_i420(GstKenburns *kb,
   double zx = (x1-x0) / (kb->dst_width);
   double zy = (y1-y0) / (kb->dst_height);
 
-  printf("x0=%g x1=%g zx=%g\n", x0, x1, zx);
   for(ydst=0; ydst < kb->dst_height; ydst++) {
     for(xdst=0; xdst < kb->dst_width; xdst++) {
       xsrc = x0 + (xdst + 0.5) * zx;
