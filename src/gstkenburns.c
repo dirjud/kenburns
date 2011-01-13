@@ -544,19 +544,19 @@ gst_kenburns_class_init (GstKenburnsClass * klass)
 			   G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_XCENTER_START,
       g_param_spec_double ("xcenter1", "Starting X position", "Starting X position as proportion of image where 0.5 is the center.",
-			   -1.0, 2.0, 0.5,
+			   -100.0, 100.0, 0.5,
 			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
   g_object_class_install_property (gobject_class, PROP_YCENTER_START,
       g_param_spec_double ("ycenter1", "Starting Y position", "Starting Y position as proportion of image where 0.5 is the center.",
-			   -1.0, 2.0, 0.5,
+			   -100.0, 100.0, 0.5,
 			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
   g_object_class_install_property (gobject_class, PROP_XCENTER_END,
       g_param_spec_double ("xcenter2", "Ending X position", "Ending X position as proportion of image where 0.5 is the center.",
-			   -1.0, 2.0, 0.5,
+			   -100.0, 100.0, 0.5,
 			   G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_YCENTER_END,
       g_param_spec_double ("ycenter2", "Ending Y position", "Ending Y position as proportion of image where 0.5 is the center.",
-			   -1.0, 2.0, 0.5,
+			   -100.0, 100.0, 0.5,
 			   G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_DURATION,
       g_param_spec_uint64 ("duration", "Duration of Effect in nanoseconds", "Duration of effect in nanoseconds",
