@@ -52,6 +52,7 @@ typedef enum {
 
 /**
  * GstKenburnsPanMethod:
+ * @GST_KENBURNS_PAN_METHOD_EXTERNAL: motion is controlled externally using the 'zoom1', 'xcenter1', and 'ycenter1' favorables. Allows use of GstController to control zoom/panning.
  * @GST_KENBURNS_PAN_METHOD_LINEAR: pans the image linearly (constant velocity) from the start position to the ending position.
  * @GST_KENBURNS_PAN_METHOD_POWER: pans the image such that the distance of the pan, as a function of time, is dist = (2 * dist^param)/2. This gives a smoother start and stop.
  * @GST_KENBURNS_PAN_VELOCITY_RAMP: pans the image such that the velocity ramps up linearly, then plateaus, then ramps back down linearly.
@@ -59,6 +60,7 @@ typedef enum {
  * Panning Method.
  */
 typedef enum {
+  GST_KENBURNS_PAN_METHOD_EXTERNAL,
   GST_KENBURNS_PAN_METHOD_LINEAR,
   GST_KENBURNS_PAN_METHOD_POWER,
   GST_KENBURNS_PAN_METHOD_VELOCITY_RAMP,

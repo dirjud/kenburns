@@ -63,6 +63,7 @@ output will look more smooth.
 #include <string.h>
 #include <gst/gst.h>
 #include <gst/video/video.h>
+#include <gst/controller/gstcontroller.h>
 #include <math.h>
 
 #define DEFAULT_ZOOM1 1.0
@@ -141,6 +142,7 @@ gst_kenburns_pan_method_get_type (void)
 {
   static GType kenburns_pan_method_type = 0;
   static const GEnumValue kenburns_pan_method[] = {
+    {GST_KENBURNS_PAN_METHOD_EXTERNAL, "external", "Motion is controlled externally, allowing GstControllers on 'zoom1', 'xcenter1', and 'ycenter1'."}, 
     {GST_KENBURNS_PAN_METHOD_LINEAR, "linear", "Linear panning (constant velocity)"},
     {GST_KENBURNS_PAN_METHOD_POWER,  "power",  "The pan distance is calculated by the distance raised to a specified power." },
     {GST_KENBURNS_PAN_METHOD_VELOCITY_RAMP,  "ramp",   "Ramp velocity of pan with a constant velocity both up and down." },
@@ -339,6 +341,11 @@ gst_kenburns_transform (GstBaseTransform * trans, GstBuffer * in,
   src = GST_BUFFER_DATA (in);
   dst = GST_BUFFER_DATA (out);
 
+  if(kb->pan_method == GST_KENBURNS_PAN_METHOD_EXTERNAL) {
+    gst_object_sync_values (G_OBJECT (kb), GST_BUFFER_TIMESTAMP (in));
+    update_start_stop_params(kb);
+  }
+
   GST_OBJECT_LOCK (kb);
   GstClockTime ts = GST_BUFFER_TIMESTAMP(in);
   if(ts >= kb->duration) ts = kb->duration;
@@ -370,6 +377,9 @@ gst_kenburns_transform (GstBaseTransform * trans, GstBuffer * in,
       }
     }
     break;
+  case GST_KENBURNS_PAN_METHOD_EXTERNAL:
+    dist = 0.0;
+    break;
   default:
     break;
   }
@@ -397,7 +407,6 @@ gst_kenburns_transform (GstBaseTransform * trans, GstBuffer * in,
   GST_OBJECT_UNLOCK (kb);
 
   return GST_FLOW_OK;
-
 }
 
 static void
@@ -528,7 +537,7 @@ gst_kenburns_class_init (GstKenburnsClass * klass)
   g_object_class_install_property (gobject_class, PROP_ZOOM_START,
       g_param_spec_double ("zoom1", "Starting Zoom", "Zoom of the initial image. 1.0 means output will be the same size as original. 0.5 means the output image will have half the zoom of the original image.",
 			   0.01, 2.0, 0.9,
-			   G_PARAM_READWRITE));
+			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
   g_object_class_install_property (gobject_class, PROP_ZOOM_END,
       g_param_spec_double ("zoom2", "Ending Zoom", "Ending Zoom",
 			   0.01, 2.0, 0.8,
@@ -536,11 +545,11 @@ gst_kenburns_class_init (GstKenburnsClass * klass)
   g_object_class_install_property (gobject_class, PROP_XCENTER_START,
       g_param_spec_double ("xcenter1", "Starting X position", "Starting X position as proportion of image where 0.5 is the center.",
 			   -1.0, 2.0, 0.5,
-			   G_PARAM_READWRITE));
+			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
   g_object_class_install_property (gobject_class, PROP_YCENTER_START,
       g_param_spec_double ("ycenter1", "Starting Y position", "Starting Y position as proportion of image where 0.5 is the center.",
 			   -1.0, 2.0, 0.5,
-			   G_PARAM_READWRITE));
+			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
   g_object_class_install_property (gobject_class, PROP_XCENTER_END,
       g_param_spec_double ("xcenter2", "Ending X position", "Ending X position as proportion of image where 0.5 is the center.",
 			   -1.0, 2.0, 0.5,
@@ -610,6 +619,7 @@ kenburns_init (GstPlugin * kenburns)
    */
   //GST_DEBUG_CATEGORY_INIT (gst_kenburns_debug, "kenburns",
   //    0, "Overlay icons on a video stream and optionally have them blink");
+  gst_controller_init (NULL, NULL);
 
   return gst_element_register (kenburns, "kenburns", GST_RANK_NONE,
       GST_TYPE_KENBURNS);
