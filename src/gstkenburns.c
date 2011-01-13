@@ -536,11 +536,11 @@ gst_kenburns_class_init (GstKenburnsClass * klass)
 
   g_object_class_install_property (gobject_class, PROP_ZOOM_START,
       g_param_spec_double ("zoom1", "Starting Zoom", "Zoom of the initial image. 1.0 means output will be the same size as original. 0.5 means the output image will have half the zoom of the original image.",
-			   0.01, 2.0, 0.9,
+			   0.01, 100.0, 0.9,
 			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
   g_object_class_install_property (gobject_class, PROP_ZOOM_END,
       g_param_spec_double ("zoom2", "Ending Zoom", "Ending Zoom",
-			   0.01, 2.0, 0.8,
+			   0.01, 100.0, 0.8,
 			   G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_XCENTER_START,
       g_param_spec_double ("xcenter1", "Starting X position", "Starting X position as proportion of image where 0.5 is the center.",
