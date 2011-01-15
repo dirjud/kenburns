@@ -344,7 +344,7 @@ static void scale_and_crop_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
       z3 = z2 * z2 / (z2 + x2 * tan_thetax); \
       x3 = x2 * z2 / (z2 + x2 * tan_thetax); \
       y3 = y2 * z3 / z2; \
-      \			   
+      \
       /* rotate back to source image plane */		\
       x4 =  x3*cos_thetax                            - (z3-z1)*sin_thetax; \
       y4 =  x3*sin_thetax*sin_thetay + y3*cos_thetay - (z3-z1)*sin_thetay*cos_thetax; \
