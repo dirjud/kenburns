@@ -51,22 +51,6 @@ typedef enum {
 } GstKenburnsInterpMethod;
 
 /**
- * GstKenburnsPanMethod:
- * @GST_KENBURNS_PAN_METHOD_EXTERNAL: motion is controlled externally using the 'zoom1', 'xcenter1', and 'ycenter1' favorables. Allows use of GstController to control zoom/panning.
- * @GST_KENBURNS_PAN_METHOD_LINEAR: pans the image linearly (constant velocity) from the start position to the ending position.
- * @GST_KENBURNS_PAN_METHOD_POWER: pans the image such that the distance of the pan, as a function of time, is dist = (2 * dist^param)/2. This gives a smoother start and stop.
- * @GST_KENBURNS_PAN_VELOCITY_RAMP: pans the image such that the velocity ramps up linearly, then plateaus, then ramps back down linearly.
- *
- * Panning Method.
- */
-typedef enum {
-  GST_KENBURNS_PAN_METHOD_EXTERNAL,
-  GST_KENBURNS_PAN_METHOD_LINEAR,
-  GST_KENBURNS_PAN_METHOD_POWER,
-  GST_KENBURNS_PAN_METHOD_VELOCITY_RAMP,
-} GstKenburnsPanMethod;
-
-/**
  * GstKenburns:
  *
  * Opaque datastructure.
@@ -80,24 +64,10 @@ struct _GstKenburns {
   gint32 border;
   GstVideoFormat src_fmt, dst_fmt;
 
-  // The starting and ending zoom factors are expressed as a fraction of the
-  // original size of the image where 1.0 is unity and 0.5 means each
-  // dimension is scaled down by two.
-  gdouble zoom1, zoom2;
-
-  // The starting and ending position are expressed as a fraction of
-  // the original image where 0.5 is the center of the image.
-  gdouble xcenter1, ycenter1, xcenter2, ycenter2; 
-
-  // the duration in seconds over which the transition is to occur.
-  GstClockTime duration;
-  
-  gdouble x0start, y0start, x1start, y1start;
-  gdouble x0end,   y0end,   x1end,   y1end;
-
+  gdouble zpos, xpos, ypos, xrot, yrot, zrot;
+  gdouble fov;
   GstKenburnsInterpMethod interp_method;
-  GstKenburnsPanMethod pan_method;
-  gdouble pan_accel;
+  guint32 bgcolor[4];
 };
 
 struct _GstKenburnsClass {

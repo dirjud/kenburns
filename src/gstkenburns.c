@@ -66,35 +66,60 @@ output will look more smooth.
 #include <gst/controller/gstcontroller.h>
 #include <math.h>
 
-#define DEFAULT_ZOOM1 1.0
-#define DEFAULT_ZOOM2 0.5
-#define DEFAULT_XCENTER1 0.5
-#define DEFAULT_YCENTER1 0.5
-#define DEFAULT_XCENTER2 0.5
-#define DEFAULT_YCENTER2 0.5
-#define DEFAULT_DURATION 5000000000ll
+#define DEFAULT_XPOS 0.0
+#define DEFAULT_YPOS 0.0
+#define DEFAULT_ZPOS 1.0
+#define DEFAULT_XROT 0.0
+#define DEFAULT_YROT 0.0
+#define DEFAULT_ZROT 0.0
 #define DEFAULT_INTERP_METHOD GST_KENBURNS_INTERP_METHOD_NEAREST
-#define DEFAULT_PAN_METHOD    GST_KENBURNS_PAN_METHOD_VELOCITY_RAMP
-#define DEFAULT_PAN_ACCEL     0.5
 #define DEFAULT_BORDER   0
+#define DEFAULT_FOV 60
+#define DEFAULT_BGCOLOR 0x00000000
+
+enum {
+  BG_ALPHA,
+  BG_RED,
+  BG_GREEN,
+  BG_BLUE,
+};
 
 /* GstKenburns properties */
+
 enum
 {
   PROP_0,
-  PROP_ZOOM_START,
-  PROP_ZOOM_END,
-  PROP_XCENTER_START,
-  PROP_YCENTER_START,
-  PROP_XCENTER_END,
-  PROP_YCENTER_END,
-  PROP_DURATION,
+  PROP_XPOS,
+  PROP_YPOS,
+  PROP_ZPOS,
+  PROP_XROT,
+  PROP_YROT,
+  PROP_ZROT,
   PROP_INTERP_METHOD,
-  PROP_PAN_METHOD,
-  PROP_PAN_ACCEL,
   PROP_BORDER,
+  PROP_FOV,
+  PROP_BGCOLOR,
   /* FILL ME */
 };
+
+
+#define COMP_Y(ret, r, g, b) \
+{ \
+   ret = (int) (((19595 * r) >> 16) + ((38470 * g) >> 16) + ((7471 * b) >> 16)); \
+   ret = CLAMP (ret, 0, 255); \
+}
+
+#define COMP_U(ret, r, g, b) \
+{ \
+   ret = (int) (-((11059 * r) >> 16) - ((21709 * g) >> 16) + ((32768 * b) >> 16) + 128); \
+   ret = CLAMP (ret, 0, 255); \
+}
+
+#define COMP_V(ret, r, g, b) \
+{ \
+   ret = (int) (((32768 * r) >> 16) - ((27439 * g) >> 16) - ((5329 * b) >> 16) + 128); \
+   ret = CLAMP (ret, 0, 255); \
+}
 
 GST_DEBUG_CATEGORY_STATIC (gst_kenburns_debug);
 #define GST_CAT_DEFAULT gst_kenburns_debug
@@ -136,54 +161,6 @@ gst_kenburns_interp_method_get_type (void)
   return kenburns_interp_method_type;
 }
 
-#define GST_TYPE_KENBURNS_PAN_METHOD (gst_kenburns_pan_method_get_type())
-static GType
-gst_kenburns_pan_method_get_type (void)
-{
-  static GType kenburns_pan_method_type = 0;
-  static const GEnumValue kenburns_pan_method[] = {
-    {GST_KENBURNS_PAN_METHOD_EXTERNAL, "external", "Motion is controlled externally, allowing GstControllers on 'zoom1', 'xcenter1', and 'ycenter1'."}, 
-    {GST_KENBURNS_PAN_METHOD_LINEAR, "linear", "Linear panning (constant velocity)"},
-    {GST_KENBURNS_PAN_METHOD_POWER,  "power",  "The pan distance is calculated by the distance raised to a specified power." },
-    {GST_KENBURNS_PAN_METHOD_VELOCITY_RAMP,  "ramp",   "Ramp velocity of pan with a constant velocity both up and down." },
-    {0, NULL, NULL},
-  };
-
-  if (!kenburns_pan_method_type) {
-    kenburns_pan_method_type =
-        g_enum_register_static ("GstKenburnsPanType", kenburns_pan_method);
-  }
-  return kenburns_pan_method_type;
-}
-
-
-static void update_start_stop_params(GstKenburns *kb) {
-  double src_ratio, dst_ratio;
-  double width_start, height_start, width_end, height_end;
-  src_ratio = kb->src_width / (double) kb->src_height;
-  dst_ratio = kb->dst_width / (double) kb->dst_height;
-
-  if(src_ratio > dst_ratio) {
-    width_start  = kb->src_width * kb->zoom1;
-    height_start = width_start / dst_ratio;
-    width_end    = kb->src_width * kb->zoom2;
-    height_end   = width_end   / dst_ratio;
-  } else {
-    height_start = kb->src_height * kb->zoom1;
-    width_start  = height_start * dst_ratio;
-    height_end   = kb->src_height * kb->zoom2;
-    width_end    = height_end * dst_ratio;
-  }
-  kb->x0start = kb->xcenter1 * kb->src_width  - width_start/2;
-  kb->x1start = kb->xcenter1 * kb->src_width  + width_start/2;
-  kb->y0start = kb->ycenter1 * kb->src_height - height_start/2;
-  kb->y1start = kb->ycenter1 * kb->src_height + height_start/2;
-  kb->x0end   = kb->xcenter2 * kb->src_width  - width_end/2;
-  kb->x1end   = kb->xcenter2 * kb->src_width  + width_end/2;
-  kb->y0end   = kb->ycenter2 * kb->src_height - height_end/2;
-  kb->y1end   = kb->ycenter2 * kb->src_height + height_end/2;
-}
-
 static gboolean gst_kenburns_set_caps (GstBaseTransform *trans, GstCaps *incaps, GstCaps *outcaps) {
   GstKenburns *kb = GST_KENBURNS (trans);
   gboolean ret;
@@ -198,8 +175,6 @@ static gboolean gst_kenburns_set_caps (GstBaseTransform *trans, GstCaps *incaps,
     GST_ERROR_OBJECT (trans, "Invalid caps: %" GST_PTR_FORMAT, outcaps);
     return FALSE;
   }
-
-  update_start_stop_params(kb);
 
   return TRUE;
   // nocap:
@@ -240,63 +215,14 @@ gst_kenburns_transform_caps (GstBaseTransform * trans,
   return ret;
 }
 
-static void scale_and_crop_i420(GstKenburns *kb, 
-				const guint8 *src, 
-				guint8 *dst,
-				double x0, double y0, double x1, double y1) {
-  int xdst, ydst, xsrc, ysrc, Y, U, V;
-  int dst_strideY, dst_strideUV, src_strideY, src_strideUV;
-  int dst_offsetU, dst_offsetV,  src_offsetU, src_offsetV;
-  int posYdst, posUdst, posVdst;
-  int posYsrc, posUsrc, posVsrc;
 
-  dst_strideY  = gst_video_format_get_row_stride(kb->dst_fmt, 0, kb->dst_width);
-  dst_strideUV = gst_video_format_get_row_stride(kb->dst_fmt, 1, kb->dst_width);
-  src_strideY  = gst_video_format_get_row_stride(kb->src_fmt, 0, kb->src_width);
-  src_strideUV = gst_video_format_get_row_stride(kb->src_fmt, 1, kb->src_width);
-
-  dst_offsetU = gst_video_format_get_component_offset(kb->dst_fmt, 1, kb->dst_width, kb->dst_height);
-  dst_offsetV = gst_video_format_get_component_offset(kb->dst_fmt, 2, kb->dst_width, kb->dst_height);
-  src_offsetU = gst_video_format_get_component_offset(kb->src_fmt, 1, kb->src_width, kb->src_height);
-  src_offsetV = gst_video_format_get_component_offset(kb->src_fmt, 2, kb->src_width, kb->src_height);
-
-  double zx = (x1-x0) / (kb->dst_width);
-  double zy = (y1-y0) / (kb->dst_height);
-
-  for(ydst=0; ydst < kb->dst_height; ydst++) {
-    for(xdst=0; xdst < kb->dst_width; xdst++) {
-      xsrc = x0 + (xdst + 0.5) * zx;
-      ysrc = y0 + (ydst + 0.5) * zy;
-      if(xsrc < 0 || xsrc >= kb->src_width || 
-	 ysrc < 0 || ysrc >= kb->src_height ||
-	 xdst < kb->border || xdst >= kb->dst_width  - kb->border ||
-	 ydst < kb->border || ydst >= kb->dst_height - kb->border) {
-	// use black if requesting a pixel that is out of bounds
-	Y  = 0;
-	U = 128;
-	V = 128;
-      } else {
-	posYsrc = xsrc + ysrc*src_strideY;
-	posUsrc = xsrc/2 + ysrc/2*src_strideUV + src_offsetU;
-	posVsrc = xsrc/2 + ysrc/2*src_strideUV + src_offsetV;
-	Y = src[posYsrc];
-	U = src[posUsrc];
-	V = src[posVsrc];
-      }
-      posYdst = xdst + ydst*dst_strideY;
-      posUdst = xdst/2 + ydst/2*dst_strideUV + dst_offsetU;
-      posVdst = xdst/2 + ydst/2*dst_strideUV + dst_offsetV;
-      dst[posYdst] = Y;
-      dst[posUdst] = U;
-      dst[posVdst] = V;
-    }
-  }
-}
-
-static void scale_and_crop_ayuv(GstKenburns *kb, 
-				const guint8 *src, 
-				guint8 *dst,
-				double x0, double y0, double x1, double y1) {
+/*
+static void scale_and_crop_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
+  double src_ratio, dst_ratio;
+  double wsrc, hsrc, wdst, hdst;
+  double xzoom, yzoom, xrotxy, yrotxy;
+  double txdst, tydst, txsrc, tysrc;
+  double zx, zy, x0, y0, cos_theta, sin_theta;
   int xdst, ydst, xsrc, ysrc;
   int dst_stride, src_stride;
   int pos_dst, pos_src;
@@ -304,13 +230,46 @@ static void scale_and_crop_ayuv(GstKenburns *kb,
   dst_stride = gst_video_format_get_row_stride(kb->dst_fmt, 0, kb->dst_width);
   src_stride = gst_video_format_get_row_stride(kb->src_fmt, 0, kb->src_width);
 
-  double zx = (x1-x0) / (kb->dst_width );
-  double zy = (y1-y0) / (kb->dst_height);
+  // Calculate the width and height being cropped out of the input image.
+  // This only depends on the zpos (zoom) and the aspect ratio of the output
+  // view port as the unit zpos needs calculated from the letterboxed input
+  // image.
+  src_ratio = kb->src_width / (double) kb->src_height;
+  dst_ratio = kb->dst_width / (double) kb->dst_height;
+  if(src_ratio > dst_ratio) {
+    wsrc = kb->src_width * kb->zpos;
+    hsrc = wsrc / dst_ratio;
+  } else {
+    hsrc = kb->src_height * kb->zpos;
+    wsrc = hsrc * dst_ratio;
+  }
+  wdst = kb->dst_width;
+  hdst = kb->dst_height;
+  zx = wsrc / wdst;
+  zy = hsrc / hdst;
+  x0 = kb->xpos * kb->src_width;
+  y0 = kb->ypos * kb->src_height;
+  
+  cos_theta = cos(kb->zrot * M_PI / 180);
+  sin_theta = sin(kb->zrot * M_PI / 180);
+
+  txdst = kb->dst_width /2.0 - 0.5;
+  tydst = kb->dst_height/2.0 - 0.5;
+  txsrc = kb->src_width /2.0;
+  tysrc = kb->src_height/2.0;
 
   for(ydst=0; ydst < kb->dst_height; ydst++) {
     for(xdst=0; xdst < kb->dst_width; xdst++) {
-      xsrc = x0 + (xdst + 0.5) * zx;
-      ysrc = y0 + (ydst + 0.5) * zy;
+      //translate to dest img center coord, zoom, and tranlate by xpos/ypos.
+      xzoom = (xdst - txdst) * zx + x0;
+      yzoom = (ydst - tydst) * zy + y0;
+
+      // rotate and translate back from center coordinates
+      xrotxy = xzoom * cos_theta - yzoom * sin_theta + txsrc;
+      yrotxy = xzoom * sin_theta + yzoom * cos_theta + tysrc;
+
+      xsrc = (int) (xrotxy + 0.4999);
+      ysrc = (int) (yrotxy + 0.4999);
 
       pos_dst = xdst*4 + ydst * dst_stride;
       pos_src = xsrc*4 + ysrc * src_stride;
@@ -328,6 +287,184 @@ static void scale_and_crop_ayuv(GstKenburns *kb,
     }
   }
 }
+*/
+
+#define TRANSFORM_SETUP(kb) \
+  double src_aspect_ratio, dst_aspect_ratio; \
+  double wsrc, hsrc, zoomx, zoomy; \
+  double thetax, thetay, thetaz, yd0, xd0, z0;	\
+  double cos_thetax, sin_thetax, tan_thetax; \
+  double cos_thetay, sin_thetay, tan_thetay; \
+  double cos_thetaz, sin_thetaz; \
+  \
+  src_aspect_ratio  = kb->src_width / (double) kb->src_height; \
+  dst_aspect_ratio  = kb->dst_width / (double) kb->dst_height; \
+  /* calculate letterbox width and height based on output aspect ratio */\
+  if(src_aspect_ratio > dst_aspect_ratio) { \
+    wsrc = kb->src_width;    \
+    hsrc = wsrc / dst_aspect_ratio; \
+  } else { \
+    hsrc = kb->src_height; \
+    wsrc = hsrc * dst_aspect_ratio; \
+  } \
+  zoomx = wsrc / kb->dst_width; \
+  zoomy = hsrc / kb->dst_height;\
+  \
+  thetax = kb->xrot*M_PI/180; \
+  thetay = kb->yrot*M_PI/180; \
+  thetaz = kb->zrot*M_PI/180; \
+  cos_thetax = cos(thetax); sin_thetax = sin(thetax); tan_thetax = tan(thetax);\
+  cos_thetay = cos(thetay); sin_thetay = sin(thetay); tan_thetay = tan(thetay);\
+  cos_thetaz = cos(thetaz); sin_thetaz = sin(thetaz); \
+  \
+  xd0 = 0.5 - kb->dst_width/2  - (wsrc-kb->src_width) / 2 / zoomx / kb->zpos; \
+  yd0 = 0.5 - kb->dst_height/2 - (hsrc-kb->src_height)/ 2 / zoomy / kb->zpos; \
+  z0 = wsrc / 2 / tan(kb->fov / 2 / 180 * M_PI); \
+
+#define TRANSFORM(xsrc, ysrc, xdst, ydst) \
+  { \
+  double x0, y0, x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4;	\
+      \
+      /* translate dest image coordinates to input image coordinates	\
+         (0,0) at the center of the input image */			\
+      x0 = ( xdst + xd0 ) * zoomx; \
+      y0 = ( ydst + yd0 ) * zoomy; \
+      \
+      /* do the z-axis rotation first because it is easiest */	\
+      x1 =  x0 * cos_thetaz + y0 * sin_thetaz; \
+      y1 = -x0 * sin_thetaz + y0 * cos_thetaz; \
+      z1 =  z0; \
+      \
+      /* find y-axis rotated image crosses the FOV */ \
+      z2 = z1 * z1 / (z1 + y1 * tan_thetay); \
+      y2 = y1 * z1 / (z1 + y1 * tan_thetay); \
+      x2 = x1 * z2 / z1; \
+      \
+      /* find x-axis rotated image crosses the FOV */ \
+      z3 = z2 * z2 / (z2 + x2 * tan_thetax); \
+      x3 = x2 * z2 / (z2 + x2 * tan_thetax); \
+      y3 = y2 * z3 / z2; \
+      \			   
+      /* rotate back to source image plane */		\
+      x4 =  x3*cos_thetax                            - (z3-z1)*sin_thetax; \
+      y4 =  x3*sin_thetax*sin_thetay + y3*cos_thetay - (z3-z1)*sin_thetay*cos_thetax; \
+      \
+      /* perform zoom and translation and then translate back to coordinates \
+         with (0,0) in the upper left corner */ 	\
+      xsrc = (x4 + kb->xpos*wsrc/2) * kb->zpos + wsrc/2; \
+      ysrc = (y4 + kb->ypos*hsrc/2) * kb->zpos + hsrc/2; \
+  }
+
+#define OUT_OF_BOUNDS(kb, xsrc, ysrc, xdst, ydst)	\
+  (xsrc < 0 || xsrc >= kb->src_width  || \
+   ysrc < 0 || ysrc >= kb->src_height || \
+   xdst < kb->border || xdst >= kb->dst_width  - kb->border || \
+   ydst < kb->border || ydst >= kb->dst_height - kb->border)
+
+
+static void transform_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
+  double xsrc0, ysrc0;
+  int xdst, ydst, xsrc, ysrc;
+  int pos_dst, pos_src;
+  int dst_stride, src_stride; 
+  guint8 bgcolor[4]; // background color
+
+  dst_stride = gst_video_format_get_row_stride(kb->dst_fmt, 0, kb->dst_width);
+  src_stride = gst_video_format_get_row_stride(kb->src_fmt, 0, kb->src_width);
+
+  TRANSFORM_SETUP(kb);
+
+  bgcolor[0] = kb->bgcolor[BG_ALPHA];
+  COMP_Y (bgcolor[1], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+  COMP_U (bgcolor[2], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+  COMP_V (bgcolor[3], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+
+  for(ydst=0; ydst < kb->dst_height; ydst++) {
+    for(xdst=0; xdst < kb->dst_width; xdst++) {
+      TRANSFORM (xsrc0, ysrc0, xdst, ydst);
+
+      // We have the position of source image as a float, so convert it
+      // to the nearest neighbor.
+      xsrc = (int) floor(xsrc0);
+      ysrc = (int) floor(ysrc0);
+
+      pos_dst = xdst*4 + ydst * dst_stride;
+      pos_src = xsrc*4 + ysrc * src_stride;
+
+      // check if this pixel is in bounds and if not, then pass the specified
+      // background color.
+      if( OUT_OF_BOUNDS (kb, xsrc, ysrc, xdst, ydst) ) {
+	// use transparent black if requesting a pixel that is out of bounds
+	memcpy(dst + pos_dst, bgcolor, 4);
+      } else {
+	// otherwise copy the nearest neighbor pixel
+	memcpy(dst + pos_dst, src + pos_src, 4);
+      }
+    }
+  }
+}
+
+static void transform_i420(GstKenburns *kb, const guint8 *src, guint8 *dst) {
+  double xsrc0, ysrc0;
+  int xdst, ydst, xsrc, ysrc;
+  int dst_strideY, dst_strideUV, src_strideY, src_strideUV;
+  int dst_offsetU, dst_offsetV,  src_offsetU, src_offsetV;
+  int posYdst, posUdst, posVdst;
+  int posYsrc, posUsrc, posVsrc;
+  int Y, U, V;
+  guint8 bgcolor[3]; // background color
+
+  dst_strideY  = gst_video_format_get_row_stride(kb->dst_fmt, 0, kb->dst_width);
+  dst_strideUV = gst_video_format_get_row_stride(kb->dst_fmt, 1, kb->dst_width);
+  src_strideY  = gst_video_format_get_row_stride(kb->src_fmt, 0, kb->src_width);
+  src_strideUV = gst_video_format_get_row_stride(kb->src_fmt, 1, kb->src_width);
+
+  dst_offsetU = gst_video_format_get_component_offset(kb->dst_fmt, 1, kb->dst_width, kb->dst_height);
+  dst_offsetV = gst_video_format_get_component_offset(kb->dst_fmt, 2, kb->dst_width, kb->dst_height);
+  src_offsetU = gst_video_format_get_component_offset(kb->src_fmt, 1, kb->src_width, kb->src_height);
+  src_offsetV = gst_video_format_get_component_offset(kb->src_fmt, 2, kb->src_width, kb->src_height);
+
+  TRANSFORM_SETUP(kb);
+
+  COMP_Y (bgcolor[0], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+  COMP_U (bgcolor[1], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+  COMP_V (bgcolor[2], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+
+  for(ydst=0; ydst < kb->dst_height; ydst++) {
+    for(xdst=0; xdst < kb->dst_width; xdst++) {
+
+      TRANSFORM (xsrc0, ysrc0, xdst, ydst);
+
+      // We have the position of source image as a float, so convert it
+      // to the nearest neighbor.
+      xsrc = (int) floor(xsrc0);
+      ysrc = (int) floor(ysrc0);
+
+      // check if this pixel is in bounds and if not, then pass the specified
+      // background color.
+      if( OUT_OF_BOUNDS (kb, xsrc, ysrc, xdst, ydst) ) {
+	// use transparent black if requesting a pixel that is out of bounds
+	Y = bgcolor[0];
+	U = bgcolor[1];
+	V = bgcolor[2];
+      } else {
+	// otherwise copy the nearest neighbor pixel
+	posYsrc = xsrc   + ysrc   * src_strideY;
+	posUsrc = xsrc/2 + ysrc/2 * src_strideUV + src_offsetU;
+	posVsrc = xsrc/2 + ysrc/2 * src_strideUV + src_offsetV;
+	Y = src[posYsrc];
+	U = src[posUsrc];
+	V = src[posVsrc];
+      }
+      posYdst = xdst   + ydst   * dst_strideY;
+      posUdst = xdst/2 + ydst/2 * dst_strideUV + dst_offsetU;
+      posVdst = xdst/2 + ydst/2 * dst_strideUV + dst_offsetV;
+      dst[posYdst] = Y;
+      dst[posUdst] = U;
+      dst[posVdst] = V;
+    }
+  }
+}
 
 static GstFlowReturn
 gst_kenburns_transform (GstBaseTransform * trans, GstBuffer * in,
@@ -336,69 +473,19 @@ gst_kenburns_transform (GstBaseTransform * trans, GstBuffer * in,
   GstKenburns *kb = GST_KENBURNS (trans);
   guint8 *dst;
   const guint8 *src;
-  double x0, y0, x1, y1, dist,p;
 
   src = GST_BUFFER_DATA (in);
   dst = GST_BUFFER_DATA (out);
-
-  if(kb->pan_method == GST_KENBURNS_PAN_METHOD_EXTERNAL) {
-    gst_object_sync_values (G_OBJECT (kb), GST_BUFFER_TIMESTAMP (in));
-    update_start_stop_params(kb);
-  }
+  gst_object_sync_values (G_OBJECT (kb), GST_BUFFER_TIMESTAMP (in));
 
   GST_OBJECT_LOCK (kb);
-  GstClockTime ts = GST_BUFFER_TIMESTAMP(in);
-  if(ts >= kb->duration) ts = kb->duration;
-
-  if(kb->duration == 0) {
-    dist = 0;
-  } else {
-    dist = (double) ts / kb->duration; // linear pan is baseline and gets modified as requested
-  }
-
-  switch(kb->pan_method) {
-  case GST_KENBURNS_PAN_METHOD_POWER:
-    p = 1.0/(1.0-kb->pan_accel/2.0);
-    if(dist < 0.5) {
-      dist =     pow(2*dist,     p) / 2.0;
-    } else {
-      dist = 1 - pow(2*(1-dist), p) / 2.0;
-    }
-    break;
-  case GST_KENBURNS_PAN_METHOD_VELOCITY_RAMP:
-    p = kb->pan_accel/2.0;
-    if(p>0) {// p==0 means linear, so we do nothing to avoid the divide by 0
-      if(dist < p) {
-	dist = dist*dist/2.0/p/(1-p);
-      } else if(dist < (1 - p)) {
-	dist = (dist - p/2) / (1-p);
-      } else {
-	dist = (dist - dist*dist/2 - p*p + p - 0.5)/p/(1-p);
-      }
-    }
-    break;
-  case GST_KENBURNS_PAN_METHOD_EXTERNAL:
-    dist = 0.0;
-    break;
-  default:
-    break;
-  }
-
-  // make sure distance is within bounds
-  if(dist > 1.0) dist = 1.0;
-  if(dist < 0.0) dist = 0.0;
-
-  x0 = kb->x0start + (kb->x0end-kb->x0start) * dist;
-  y0 = kb->y0start + (kb->y0end-kb->y0start) * dist;
-  x1 = kb->x1start + (kb->x1end-kb->x1start) * dist;
-  y1 = kb->y1start + (kb->y1end-kb->y1start) * dist;
 
   switch (kb->src_fmt) {
   case GST_VIDEO_FORMAT_I420:
-    scale_and_crop_i420(kb, src, dst, x0, y0, x1, y1);
+    transform_i420(kb, src, dst);
     break;
   case GST_VIDEO_FORMAT_AYUV:
-    scale_and_crop_ayuv(kb, src, dst, x0, y0, x1, y1);
+    transform_ayuv(kb, src, dst);
     break;
   default:
     break;
@@ -416,45 +503,40 @@ gst_kenburns_set_property (GObject * object, guint prop_id,
   GstKenburns *kb = GST_KENBURNS (object);
 
   switch (prop_id) {
-    case PROP_ZOOM_START:
-      kb->zoom1 = g_value_get_double(value);
-      update_start_stop_params(kb);
+    case PROP_XPOS:
+      kb->xpos = g_value_get_double(value);
       break;
-    case PROP_ZOOM_END:
-      kb->zoom2 = g_value_get_double(value);
-      update_start_stop_params(kb);
+    case PROP_YPOS:
+      kb->ypos = g_value_get_double(value);
       break;
-    case PROP_XCENTER_START:
-      kb->xcenter1 = g_value_get_double(value);
-      update_start_stop_params(kb);
+    case PROP_ZPOS:
+      kb->zpos = g_value_get_double(value);
       break;
-    case PROP_YCENTER_START:
-      kb->ycenter1 = g_value_get_double(value);
-      update_start_stop_params(kb);
+    case PROP_XROT:
+      kb->xrot = g_value_get_double(value);
       break;
-    case PROP_XCENTER_END:
-      kb->xcenter2 = g_value_get_double(value);
-      update_start_stop_params(kb);
+    case PROP_YROT:
+      kb->yrot = g_value_get_double(value);
       break;
-    case PROP_YCENTER_END:
-      kb->ycenter2 = g_value_get_double(value);
-      update_start_stop_params(kb);
+    case PROP_ZROT:
+      kb->zrot = g_value_get_double(value);
       break;
-    case PROP_DURATION:
-      kb->duration = g_value_get_uint64(value);
-      update_start_stop_params(kb);
+    case PROP_FOV:
+      kb->fov = g_value_get_double(value);
       break;
     case PROP_INTERP_METHOD:
       kb->interp_method = g_value_get_enum (value);
       break;
-    case PROP_PAN_METHOD:
-      kb->pan_method = g_value_get_enum (value);
-      break;
-    case PROP_PAN_ACCEL:
-      kb->pan_accel = g_value_get_double(value);
-      break;
     case PROP_BORDER:
       kb->border = g_value_get_int(value);
+      break;
+    case PROP_BGCOLOR:
+      { uint tmp = g_value_get_uint(value);
+	kb->bgcolor[BG_ALPHA] = (tmp >> 24) & 0xFF;
+	kb->bgcolor[BG_RED]   = (tmp >> 16) & 0xFF;
+	kb->bgcolor[BG_GREEN] = (tmp >>  8) & 0xFF;
+	kb->bgcolor[BG_BLUE]  = (tmp >>  0) & 0xFF;
+      }
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -469,42 +551,42 @@ gst_kenburns_get_property (GObject * object, guint prop_id, GValue * value,
   GstKenburns *kb = GST_KENBURNS (object);
 
   switch (prop_id) {
-    case PROP_ZOOM_START:
-      g_value_set_double(value, kb->zoom1);
-      break;
-    case PROP_ZOOM_END:
-      g_value_set_double(value, kb->zoom2);
-      break;
-    case PROP_XCENTER_START:
-      g_value_set_double(value, kb->xcenter1);
-      break;
-    case PROP_YCENTER_START:
-      g_value_set_double(value, kb->ycenter1);
-      break;
-    case PROP_XCENTER_END:
-      g_value_set_double(value, kb->xcenter2);
-      break;
-    case PROP_YCENTER_END:
-      g_value_set_double(value, kb->ycenter2);
-      break;
-    case PROP_DURATION:
-      g_value_set_uint64(value, kb->duration);
-      break;
-    case PROP_INTERP_METHOD:
-      g_value_set_enum(value, kb->interp_method);
-      break;
-    case PROP_PAN_METHOD:
-      g_value_set_enum(value, kb->pan_method);
-      break;
-    case PROP_PAN_ACCEL:
-      g_value_set_double(value, kb->pan_accel);
-      break;
-    case PROP_BORDER:
-      g_value_set_int(value, kb->border);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
+  case PROP_XPOS:
+    g_value_set_double(value, kb->xpos);
+    break;
+  case PROP_YPOS:
+    g_value_set_double(value, kb->ypos);
+    break;
+  case PROP_ZPOS:
+    g_value_set_double(value, kb->zpos);
+    break;
+  case PROP_XROT:
+    g_value_set_double(value, kb->xrot);
+    break;
+  case PROP_YROT:
+    g_value_set_double(value, kb->yrot);
+    break;
+  case PROP_ZROT:
+    g_value_set_double(value, kb->zrot);
+    break;
+  case PROP_FOV:
+    g_value_set_double(value, kb->fov);
+    break;
+  case PROP_INTERP_METHOD:
+    g_value_set_enum(value, kb->interp_method);
+    break;
+  case PROP_BORDER:
+    g_value_set_int(value, kb->border);
+    break;
+  case PROP_BGCOLOR:
+    g_value_set_uint(value, ((kb->bgcolor[BG_ALPHA] << 24) |
+			     (kb->bgcolor[BG_RED]   << 16) |
+			     (kb->bgcolor[BG_GREEN] <<  8) |
+			     (kb->bgcolor[BG_BLUE]  <<  0) ));
+    break;
+  default:
+    G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+    break;
   }
 }
 
@@ -513,7 +595,7 @@ gst_kenburns_base_init (gpointer g_class)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
 
-  gst_element_class_set_details_simple (element_class, "kenburns",
+  gst_element_class_set_details_simple (element_class, "percieve",
       "Filter/Effect/Video",
       "Kenburnsors video", "David Schleef <ds@schleef.org>");
 
@@ -529,59 +611,62 @@ gst_kenburns_class_init (GstKenburnsClass * klass)
   GObjectClass *gobject_class = (GObjectClass *) klass;
   GstBaseTransformClass *trans_class = (GstBaseTransformClass *) klass;
 
-  GST_DEBUG_CATEGORY_INIT (gst_kenburns_debug, "kenburns", 0, "kenburns");
+  GST_DEBUG_CATEGORY_INIT (gst_kenburns_debug, "percieve", 0, "percieve");
 
   gobject_class->set_property = gst_kenburns_set_property;
   gobject_class->get_property = gst_kenburns_get_property;
 
-  g_object_class_install_property (gobject_class, PROP_ZOOM_START,
-      g_param_spec_double ("zoom1", "Starting Zoom", "Zoom of the initial image. 1.0 means output will be the same size as original. 0.5 means the output image will have half the zoom of the original image.",
-			   0.01, 100.0, 0.9,
+  g_object_class_install_property (gobject_class, PROP_XPOS,
+      g_param_spec_double ("xpos", "x viewing position", "x=0.0 corresonds to no x translation. 1.0 corresponds to an x translation of the input image width.",
+			   -G_MAXDOUBLE, G_MAXDOUBLE, DEFAULT_XPOS,
 			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
-  g_object_class_install_property (gobject_class, PROP_ZOOM_END,
-      g_param_spec_double ("zoom2", "Ending Zoom", "Ending Zoom",
-			   0.01, 100.0, 0.8,
-			   G_PARAM_READWRITE));
-  g_object_class_install_property (gobject_class, PROP_XCENTER_START,
-      g_param_spec_double ("xcenter1", "Starting X position", "Starting X position as proportion of image where 0.5 is the center.",
-			   -100.0, 100.0, 0.5,
+
+  g_object_class_install_property (gobject_class, PROP_YPOS,
+      g_param_spec_double ("ypos", "y viewing position", "y=0.0 corresponds to no y translation. 1.0 corresponds to a y translation of the input image height.",
+			   -G_MAXDOUBLE, G_MAXDOUBLE, DEFAULT_YPOS,
 			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
-  g_object_class_install_property (gobject_class, PROP_YCENTER_START,
-      g_param_spec_double ("ycenter1", "Starting Y position", "Starting Y position as proportion of image where 0.5 is the center.",
-			   -100.0, 100.0, 0.5,
+
+  g_object_class_install_property (gobject_class, PROP_ZPOS,
+      g_param_spec_double ("zpos", "z viewing position", "z=1.0 corresponds to the viewing distance to see a letterbox image at the output.",
+			   0.001, G_MAXDOUBLE, DEFAULT_ZPOS,
 			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
-  g_object_class_install_property (gobject_class, PROP_XCENTER_END,
-      g_param_spec_double ("xcenter2", "Ending X position", "Ending X position as proportion of image where 0.5 is the center.",
-			   -100.0, 100.0, 0.5,
-			   G_PARAM_READWRITE));
-  g_object_class_install_property (gobject_class, PROP_YCENTER_END,
-      g_param_spec_double ("ycenter2", "Ending Y position", "Ending Y position as proportion of image where 0.5 is the center.",
-			   -100.0, 100.0, 0.5,
-			   G_PARAM_READWRITE));
-  g_object_class_install_property (gobject_class, PROP_DURATION,
-      g_param_spec_uint64 ("duration", "Duration of Effect in nanoseconds", "Duration of effect in nanoseconds",
-			   0, G_MAXUINT64, 5000000000ull,
-			   G_PARAM_READWRITE));
+
+  g_object_class_install_property (gobject_class, PROP_XROT,
+      g_param_spec_double ("xrot", "roation about x axis", "Rotation of input image about the x-axis in degrees about its center.",
+			   -G_MAXDOUBLE, G_MAXDOUBLE, DEFAULT_XROT,
+			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+
+  g_object_class_install_property (gobject_class, PROP_YROT,
+      g_param_spec_double ("yrot", "roation about y axis", "Rotation of input image about the y-axis in degrees about its center.",
+			   -G_MAXDOUBLE, G_MAXDOUBLE, DEFAULT_YROT,
+			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+
+  g_object_class_install_property (gobject_class, PROP_ZROT,
+      g_param_spec_double ("zrot", "roation about z axis", "Rotation of input image about the z-axis in degrees about its center.",
+			   -G_MAXDOUBLE, G_MAXDOUBLE, DEFAULT_ZROT,
+			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+
+  g_object_class_install_property (gobject_class, PROP_FOV,
+      g_param_spec_double ("fov", "Field of View Angle", "Total angle in field of view.",
+			   0.001, 180, DEFAULT_FOV,
+			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+
   g_object_class_install_property (gobject_class, PROP_INTERP_METHOD,
       g_param_spec_enum ("interp-method", "Interpolation method",
 			 "Method for interpolating the output image", 
 			 GST_TYPE_KENBURNS_INTERP_METHOD,
 			 DEFAULT_INTERP_METHOD,
 			 G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_PAN_METHOD,
-      g_param_spec_enum ("pan-method", "Panning method",
-			 "Method for panning the image. The linear method causes the pan to move uniformly with a constant velocity. The other seek a more gradual pan by giving a non-constant pan. The 'pan-accel' parameter controls this other methods.",
-			 GST_TYPE_KENBURNS_PAN_METHOD,
-			 DEFAULT_PAN_METHOD,
-			 G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_PAN_ACCEL,
-      g_param_spec_double ("pan-accel", "Panning Acceleration", "0.0 means constant velocity and 1.0 is the max acceleration. Only valid when not in linear panning mode.",
-			   0.0, 1.0, DEFAULT_PAN_ACCEL,
-			   G_PARAM_READWRITE));
+
   g_object_class_install_property (gobject_class, PROP_BORDER,
       g_param_spec_int ("border", "Frame border on output image", "Number of pixels to use as a border around the output image.",
 			   0, G_MAXINT32, DEFAULT_BORDER,
-			   G_PARAM_READWRITE));
+			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+
+  g_object_class_install_property (gobject_class, PROP_BGCOLOR,
+      g_param_spec_uint ("background-color", "Background Color", "Color to use for background. Should be of the form '(a<<24) | (r<<16) | (g<<8) | (b<<0)' where a is alpha, r is red, g is green, and b is blue. Alpha will be ignored for formats that do not support alpha.",
+			   0, G_MAXUINT32, DEFAULT_BGCOLOR,
+			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
 
   trans_class->set_caps       = GST_DEBUG_FUNCPTR (gst_kenburns_set_caps);
   trans_class->transform      = GST_DEBUG_FUNCPTR (gst_kenburns_transform);
@@ -591,17 +676,19 @@ gst_kenburns_class_init (GstKenburnsClass * klass)
 static void
 gst_kenburns_init (GstKenburns * kb, GstKenburnsClass * klass)
 {
-  kb->zoom1         = DEFAULT_ZOOM1;
-  kb->zoom2         = DEFAULT_ZOOM2;
-  kb->xcenter1      = DEFAULT_XCENTER1;
-  kb->ycenter1      = DEFAULT_YCENTER1;
-  kb->xcenter2      = DEFAULT_XCENTER2;
-  kb->ycenter2      = DEFAULT_YCENTER2;;
-  kb->duration      = DEFAULT_DURATION;
+  kb->xpos      = DEFAULT_XPOS;
+  kb->ypos      = DEFAULT_YPOS;
+  kb->zpos      = DEFAULT_ZPOS;
+  kb->xrot      = DEFAULT_XROT;
+  kb->yrot      = DEFAULT_YROT;
+  kb->zrot      = DEFAULT_ZROT;
   kb->interp_method = DEFAULT_INTERP_METHOD;
-  kb->pan_method    = DEFAULT_PAN_METHOD;
-  kb->pan_accel     = DEFAULT_PAN_ACCEL;
-
+  kb->border  = DEFAULT_BORDER;
+  kb->fov     = DEFAULT_FOV;
+  kb->bgcolor[BG_ALPHA] = (DEFAULT_BGCOLOR >> 24) & 0xFF;
+  kb->bgcolor[BG_RED]   = (DEFAULT_BGCOLOR >> 16) & 0xFF;
+  kb->bgcolor[BG_GREEN] = (DEFAULT_BGCOLOR >> 8)  & 0xFF;
+  kb->bgcolor[BG_BLUE]  = (DEFAULT_BGCOLOR >> 0)  & 0xFF;
   gst_base_transform_set_passthrough (GST_BASE_TRANSFORM (kb), FALSE);
 }
 
@@ -621,7 +708,7 @@ kenburns_init (GstPlugin * kenburns)
   //    0, "Overlay icons on a video stream and optionally have them blink");
   gst_controller_init (NULL, NULL);
 
-  return gst_element_register (kenburns, "kenburns", GST_RANK_NONE,
+  return gst_element_register (kenburns, "percieve", GST_RANK_NONE,
       GST_TYPE_KENBURNS);
 }
 
@@ -633,7 +720,7 @@ kenburns_init (GstPlugin * kenburns)
 GST_PLUGIN_DEFINE (
     GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "kenburns",
+    "precieve",
     "Ken Burns still zoom/crop/pan",
     kenburns_init,
     VERSION,
