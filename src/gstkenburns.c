@@ -297,6 +297,8 @@ static void scale_and_crop_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
   double cos_thetay, sin_thetay, tan_thetay; \
   double cos_thetaz, sin_thetaz; \
   \
+  double x0, y0, x1, y1, z1, x2, y2, z2, x4, y4, G, det;	\
+  \
   src_aspect_ratio  = kb->src_width / (double) kb->src_height; \
   dst_aspect_ratio  = kb->dst_width / (double) kb->dst_height; \
   /* calculate letterbox width and height based on output aspect ratio */\
@@ -317,13 +319,11 @@ static void scale_and_crop_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
   cos_thetay = cos(thetay); sin_thetay = sin(thetay); tan_thetay = tan(thetay);\
   cos_thetaz = cos(thetaz); sin_thetaz = sin(thetaz); \
   \
-  xd0 = 0.5 - kb->dst_width/2  - (wsrc-kb->src_width) / 2 / zoomx / kb->zpos; \
-  yd0 = 0.5 - kb->dst_height/2 - (hsrc-kb->src_height)/ 2 / zoomy / kb->zpos; \
+  xd0 = 0.5 - kb->dst_width/2;  \
+  yd0 = 0.5 - kb->dst_height/2; \
   z0 = wsrc / 2 / tan(kb->fov / 2 / 180 * M_PI); \
 
 #define TRANSFORM(xsrc, ysrc, xdst, ydst) \
-  { \
-  double x0, y0, x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4;	\
       \
       /* translate dest image coordinates to input image coordinates	\
          (0,0) at the center of the input image */			\
@@ -331,29 +331,24 @@ static void scale_and_crop_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
       y0 = ( ydst + yd0 ) * zoomy; \
       \
       /* do the z-axis rotation first because it is easiest */	\
-      x1 =  x0 * cos_thetaz + y0 * sin_thetaz; \
-      y1 = -x0 * sin_thetaz + y0 * cos_thetaz; \
+      x1 =  x0 * cos_thetaz - y0 * sin_thetaz; \
+      y1 =  x0 * sin_thetaz + y0 * cos_thetaz; \
       z1 =  z0; \
       \
-      /* find y-axis rotated image crosses the FOV */ \
-      z2 = z1 * z1 / (z1 + y1 * tan_thetay); \
-      y2 = y1 * z1 / (z1 + y1 * tan_thetay); \
-      x2 = x1 * z2 / z1; \
-      \
-      /* find x-axis rotated image crosses the FOV */ \
-      z3 = z2 * z2 / (z2 + x2 * tan_thetax); \
-      x3 = x2 * z2 / (z2 + x2 * tan_thetax); \
-      y3 = y2 * z3 / z2; \
+      det = -x1*sin_thetax + y1*cos_thetax*sin_thetay + z1*cos_thetax*cos_thetay;\
+      G = cos_thetay * cos_thetax; \
+      x2 = G/det * x1 * z1; \
+      y2 = G/det * y1 * z1; \
+      z2 = G/det * z1 * z1 - z1; \
       \
       /* rotate back to source image plane */		\
-      x4 =  x3*cos_thetax                            - (z3-z1)*sin_thetax; \
-      y4 =  x3*sin_thetax*sin_thetay + y3*cos_thetay - (z3-z1)*sin_thetay*cos_thetax; \
+      x4 =  x2*cos_thetax + y2*sin_thetay*sin_thetax + z2*cos_thetay*sin_thetax; \
+      y4 =                  y2*cos_thetay            - z2*sin_thetay; \
       \
       /* perform zoom and translation and then translate back to coordinates \
          with (0,0) in the upper left corner */ 	\
-      xsrc = (x4 + kb->xpos*wsrc/2) * kb->zpos + wsrc/2; \
-      ysrc = (y4 + kb->ypos*hsrc/2) * kb->zpos + hsrc/2; \
-  }
+      xsrc = (x4 + kb->xpos*wsrc/2) * kb->zpos + kb->src_width/2; \
+      ysrc = (y4 + kb->ypos*hsrc/2) * kb->zpos + kb->src_height/2; \
 
 #define OUT_OF_BOUNDS(kb, xsrc, ysrc, xdst, ydst)	\
   (xsrc < 0 || xsrc >= kb->src_width  || \
@@ -378,6 +373,7 @@ static void transform_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
   COMP_Y (bgcolor[1], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
   COMP_U (bgcolor[2], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
   COMP_V (bgcolor[3], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+
 
   for(ydst=0; ydst < kb->dst_height; ydst++) {
     for(xdst=0; xdst < kb->dst_width; xdst++) {

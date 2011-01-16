@@ -4,7 +4,7 @@ gobject.threads_init()
 
 src = gst.element_factory_make("videotestsrc")
 caps1 = gst.element_factory_make("capsfilter")
-caps1.props.caps = gst.Caps("video/x-raw-yuv,width=1280,height=960,format=(fourcc)I420,framerate=(fraction)15/1")
+caps1.props.caps = gst.Caps("video/x-raw-yuv,width=640,height=480,format=(fourcc)I420,framerate=(fraction)15/1")
 kb = gst.element_factory_make("percieve")
 caps2 = gst.element_factory_make("capsfilter")
 caps2.props.caps = gst.Caps("video/x-raw-yuv,width=640,height=480,format=(fourcc)I420,framerate=(fraction)15/1")
@@ -12,11 +12,11 @@ dur = 2*gst.SECOND
 
 filename = "transform"
 
-kb.props.zpos = 3.0
+kb.props.zpos = 2.0
 kb.props.zrot = 0
-kb.props.yrot = 60
-kb.props.xrot = 110
-kb.props.fov  = 5
+kb.props.yrot = 45
+kb.props.xrot = 45
+kb.props.fov  = 60
 controller = gst.Controller(kb, "zpos", "xpos", "ypos", "zrot", "yrot", "xrot", "fov")
 #controller.set_interpolation_mode("zpos", gst.INTERPOLATE_LINEAR)
 freq = 0.25 / 4
@@ -35,10 +35,9 @@ def LFO(which, amplitude, offset, timeshift=0, freq_factor=2.1):
 #LFO("xpos", amplitude=0.5, offset=0.0, freq_factor=1.0)
 #LFO("ypos", amplitude=0.5, offset=0.0, timeshift=int(1.0 / freq / 4.0 * gst.SECOND))
 #LFO("zpos", amplitude=1.0, offset=1.25)
-#LFO("zrot", amplitude=180, offset=0)
+LFO("zrot", amplitude=180, offset=0)
 #LFO("yrot", amplitude=180, offset=0)
 #LFO("xrot", amplitude=180, offset=0)
-LFO("xrot", amplitude=20, offset=90)
 #LFO("fov",  amplitude=30,  offset=60)
 
 queue = gst.element_factory_make("queue")
