@@ -177,8 +177,6 @@ static gboolean gst_kenburns_set_caps (GstBaseTransform *trans, GstCaps *incaps,
   }
 
   return TRUE;
-  // nocap:
-  //  return FALSE;
 }
 
 static GstCaps *
@@ -215,140 +213,101 @@ gst_kenburns_transform_caps (GstBaseTransform * trans,
   return ret;
 }
 
-
-/*
-static void scale_and_crop_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
-  double src_ratio, dst_ratio;
-  double wsrc, hsrc, wdst, hdst;
-  double xzoom, yzoom, xrotxy, yrotxy;
-  double txdst, tydst, txsrc, tysrc;
-  double zx, zy, x0, y0, cos_theta, sin_theta;
-  int xdst, ydst, xsrc, ysrc;
-  int dst_stride, src_stride;
-  int pos_dst, pos_src;
-
-  dst_stride = gst_video_format_get_row_stride(kb->dst_fmt, 0, kb->dst_width);
-  src_stride = gst_video_format_get_row_stride(kb->src_fmt, 0, kb->src_width);
-
-  // Calculate the width and height being cropped out of the input image.
-  // This only depends on the zpos (zoom) and the aspect ratio of the output
-  // view port as the unit zpos needs calculated from the letterboxed input
-  // image.
-  src_ratio = kb->src_width / (double) kb->src_height;
-  dst_ratio = kb->dst_width / (double) kb->dst_height;
-  if(src_ratio > dst_ratio) {
-    wsrc = kb->src_width * kb->zpos;
-    hsrc = wsrc / dst_ratio;
-  } else {
-    hsrc = kb->src_height * kb->zpos;
-    wsrc = hsrc * dst_ratio;
-  }
-  wdst = kb->dst_width;
-  hdst = kb->dst_height;
-  zx = wsrc / wdst;
-  zy = hsrc / hdst;
-  x0 = kb->xpos * kb->src_width;
-  y0 = kb->ypos * kb->src_height;
-  
-  cos_theta = cos(kb->zrot * M_PI / 180);
-  sin_theta = sin(kb->zrot * M_PI / 180);
-
-  txdst = kb->dst_width /2.0 - 0.5;
-  tydst = kb->dst_height/2.0 - 0.5;
-  txsrc = kb->src_width /2.0;
-  tysrc = kb->src_height/2.0;
-
-  for(ydst=0; ydst < kb->dst_height; ydst++) {
-    for(xdst=0; xdst < kb->dst_width; xdst++) {
-      //translate to dest img center coord, zoom, and tranlate by xpos/ypos.
-      xzoom = (xdst - txdst) * zx + x0;
-      yzoom = (ydst - tydst) * zy + y0;
-
-      // rotate and translate back from center coordinates
-      xrotxy = xzoom * cos_theta - yzoom * sin_theta + txsrc;
-      yrotxy = xzoom * sin_theta + yzoom * cos_theta + tysrc;
-
-      xsrc = (int) (xrotxy + 0.4999);
-      ysrc = (int) (yrotxy + 0.4999);
-
-      pos_dst = xdst*4 + ydst * dst_stride;
-      pos_src = xsrc*4 + ysrc * src_stride;
-
-      if(xsrc < 0 || xsrc >= kb->src_width || 
-	 ysrc < 0 || ysrc >= kb->src_height ||
-	 xdst < kb->border || xdst >= kb->dst_width  - kb->border ||
-	 ydst < kb->border || ydst >= kb->dst_height - kb->border) {
-	// use transparent black if requesting a pixel that is out of bounds
-	memset(dst + pos_dst, 0, 4);
-      } else {
-	// otherwise copy the nearest neighbor pixel
-	memcpy(dst + pos_dst, src + pos_src, 4);
-      }
-    }
-  }
-}
-*/
+#if 0
+#define FRAC gint64
+#define FRAC_WIDTH 12
+#define INT2FRAC(x)    (x << FRAC_WIDTH)
+#define DBL2FRAC(x)    ((int) (x*(1<< FRAC_WIDTH)))
+#define FRAC_MULT(x,y) ((x*y) >> FRAC_WIDTH)
+#define FRAC_DIV(x,y)  ((x<<FRAC_WIDTH)/y)
+#define FLOOR_FRAC(x)  (x >> FRAC_WIDTH)
+#define INC_FROM_ZERO  1
+#else
+#define FRAC double
+#define INT2FRAC(x)    ((double) x)
+#define DBL2FRAC(x)    (x)
+#define FRAC_MULT(x,y) (x*y)
+#define FRAC_DIV(x,y)  (x/y)
+#define FLOOR_FRAC(x)  ((int) floor(x))
+#define INC_FROM_ZERO  1e-9
+#endif
 
 #define TRANSFORM_SETUP(kb) \
   double src_aspect_ratio, dst_aspect_ratio; \
-  double wsrc, hsrc, zoomx, zoomy; \
-  double thetax, thetay, thetaz, yd0, xd0, z0;	\
-  double cos_thetax, sin_thetax, tan_thetax; \
-  double cos_thetay, sin_thetay, tan_thetay; \
-  double cos_thetaz, sin_thetaz; \
-  \
-  double x0, y0, x1, y1, z1, x2, y2, z2, x4, y4, G, det;	\
+  FRAC cos_thetax, sin_thetax, tan_thetax; \
+  FRAC cos_thetay, sin_thetay, tan_thetay; \
+  FRAC cos_thetaz, sin_thetaz, tan_thetax_on_cos_thetay;		\
+  FRAC wsrc, hsrc, wlb, hlb, zoomx, zoomy, yd0, xd0, xs3, ys3, z1, zpos; \
   \
   src_aspect_ratio  = kb->src_width / (double) kb->src_height; \
   dst_aspect_ratio  = kb->dst_width / (double) kb->dst_height; \
   /* calculate letterbox width and height based on output aspect ratio */\
-  if(src_aspect_ratio > dst_aspect_ratio) { \
-    wsrc = kb->src_width;    \
-    hsrc = wsrc / dst_aspect_ratio; \
+  if(src_aspect_ratio > dst_aspect_ratio) {				\
+    wlb  = INT2FRAC(kb->src_width);  /* letterbox width */		\
+    wsrc = wlb;                          /* actual width is the same */ \
+    hlb  = wlb * kb->dst_height / kb->dst_width; /* letterbox height */ \
+    hsrc = INT2FRAC(kb->src_height);  /* actual height */	\
   } else { \
-    hsrc = kb->src_height; \
-    wsrc = hsrc * dst_aspect_ratio; \
+    hlb  = INT2FRAC(kb->src_height);	         \
+    hsrc = hlb;                                  \
+    wlb  = hlb * kb->dst_width / kb->dst_height; \
+    wsrc = INT2FRAC(kb->src_width);	         \
   } \
-  zoomx = wsrc / kb->dst_width; \
-  zoomy = hsrc / kb->dst_height;\
+  zoomx = wlb / kb->dst_width;  \
+  zoomy = hlb / kb->dst_height; \
   \
-  thetax = kb->xrot*M_PI/180; \
-  thetay = kb->yrot*M_PI/180; \
-  thetaz = kb->zrot*M_PI/180; \
-  cos_thetax = cos(thetax); sin_thetax = sin(thetax); tan_thetax = tan(thetax);\
-  cos_thetay = cos(thetay); sin_thetay = sin(thetay); tan_thetay = tan(thetay);\
-  cos_thetaz = cos(thetaz); sin_thetaz = sin(thetaz); \
+  cos_thetax = DBL2FRAC(cos(kb->xrot*M_PI/180)); \
+  sin_thetax = DBL2FRAC(sin(kb->xrot*M_PI/180)); \
+  tan_thetax = DBL2FRAC(tan(kb->xrot*M_PI/180)); \
+  cos_thetay = DBL2FRAC(cos(kb->yrot*M_PI/180)); \
+  sin_thetay = DBL2FRAC(sin(kb->yrot*M_PI/180)); \
+  tan_thetay = DBL2FRAC(tan(kb->yrot*M_PI/180)); \
+  cos_thetaz = DBL2FRAC(cos(kb->zrot*M_PI/180)); \
+  sin_thetaz = DBL2FRAC(sin(kb->zrot*M_PI/180)); \
+  if(cos_thetay == 0) { cos_thetay= INC_FROM_ZERO; } \
+  tan_thetax_on_cos_thetay = FRAC_DIV(tan_thetax,cos_thetay); \
   \
-  xd0 = 0.5 - kb->dst_width/2;  \
-  yd0 = 0.5 - kb->dst_height/2; \
-  z0 = wsrc / 2 / tan(kb->fov / 2 / 180 * M_PI); \
+  xd0 = DBL2FRAC(0.5) - INT2FRAC(kb->dst_width)/2;			\
+  yd0 = DBL2FRAC(0.5) - INT2FRAC(kb->dst_height)/2;			\
+  xs3 = ((FRAC) (wlb * kb->xpos + wsrc / kb->zpos)) / 2;		\
+  ys3 = ((FRAC) (hlb * kb->ypos + hsrc / kb->zpos)) / 2;		\
+  zpos = DBL2FRAC(kb->zpos); \
+  \
+  /* z1 is the distance is pixels required for the requested fov to see get \
+     the letterbox image perfectly framed.*/ \
+  z1 = (FRAC) (((wlb > hlb) ? wlb : hlb) / 2 / tan(kb->fov / 2 / 180 * M_PI));
+
 
 #define TRANSFORM(xsrc, ysrc, xdst, ydst) \
+  {   \
+      FRAC x0, y0, x1, y1, x2, y2, z2, x3, y3, det;	\
       \
       /* translate dest image coordinates to input image coordinates	\
          (0,0) at the center of the input image */			\
-      x0 = ( xdst + xd0 ) * zoomx; \
-      y0 = ( ydst + yd0 ) * zoomy; \
+      x0 = FRAC_MULT ((INT2FRAC (xdst) + xd0 ), zoomx);			\
+      y0 = FRAC_MULT ((INT2FRAC (ydst) + yd0 ), zoomy);			\
       \
       /* do the z-axis rotation first because it is easiest */	\
-      x1 =  x0 * cos_thetaz - y0 * sin_thetaz; \
-      y1 =  x0 * sin_thetaz + y0 * cos_thetaz; \
-      z1 =  z0; \
+      x1 =  FRAC_MULT(x0, cos_thetaz) - FRAC_MULT(y0, sin_thetaz);	\
+      y1 =  FRAC_MULT(x0, sin_thetaz) + FRAC_MULT(y0, cos_thetaz);	\
       \
-      det = -x1*sin_thetax + y1*cos_thetax*sin_thetay + z1*cos_thetax*cos_thetay;\
-      G = cos_thetay * cos_thetax; \
-      x2 = G/det * x1 * z1; \
-      y2 = G/det * y1 * z1; \
-      z2 = G/det * z1 * z1 - z1; \
+      /* now find where the x/y axis rotations intersect the current ray \
+	 of vision. */ \
+      det = FRAC_MULT(-x1, tan_thetax_on_cos_thetay) + FRAC_MULT(y1, tan_thetay) + z1; \
+      if( det == 0) { det = INC_FROM_ZERO; } \
+      x2 = FRAC_DIV(FRAC_MULT(x1, z1), det); \
+      y2 = FRAC_DIV(FRAC_MULT(y1, z1), det); \
+      z2 = FRAC_DIV(FRAC_MULT(z1, z1), det) - z1; \
       \
       /* rotate back to source image plane */		\
-      x4 =  x2*cos_thetax + y2*sin_thetay*sin_thetax + z2*cos_thetay*sin_thetax; \
-      y4 =                  y2*cos_thetay            - z2*sin_thetay; \
+      x3 =  FRAC_MULT(x2, cos_thetax) + FRAC_MULT(FRAC_MULT(y2, sin_thetay), sin_thetax) + FRAC_MULT(FRAC_MULT(z2, cos_thetay), sin_thetax); \
+      y3 =  FRAC_MULT(y2, cos_thetay) - FRAC_MULT(z2, sin_thetay);	\
       \
-      /* perform zoom and translation and then translate back to coordinates \
-         with (0,0) in the upper left corner */ 	\
-      xsrc = (x4 + kb->xpos*wsrc/2) * kb->zpos + kb->src_width/2; \
-      ysrc = (y4 + kb->ypos*hsrc/2) * kb->zpos + kb->src_height/2; \
+      /* perform zoom and translation and then translate back to (0,0) in
+         the upper left corner */    \
+      xsrc = FRAC_MULT ((x3 + xs3), zpos);	   \
+      ysrc = FRAC_MULT ((y3 + ys3), zpos);	   \
+  }
 
 #define OUT_OF_BOUNDS(kb, xsrc, ysrc, xdst, ydst)	\
   (xsrc < 0 || xsrc >= kb->src_width  || \
@@ -358,7 +317,7 @@ static void scale_and_crop_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
 
 
 static void transform_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
-  double xsrc0, ysrc0;
+  FRAC xsrc0, ysrc0;
   int xdst, ydst, xsrc, ysrc;
   int pos_dst, pos_src;
   int dst_stride, src_stride; 
@@ -381,8 +340,8 @@ static void transform_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
 
       // We have the position of source image as a float, so convert it
       // to the nearest neighbor.
-      xsrc = (int) floor(xsrc0);
-      ysrc = (int) floor(ysrc0);
+      xsrc = FLOOR_FRAC(xsrc0);
+      ysrc = FLOOR_FRAC(ysrc0);
 
       pos_dst = xdst*4 + ydst * dst_stride;
       pos_src = xsrc*4 + ysrc * src_stride;
@@ -401,7 +360,7 @@ static void transform_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
 }
 
 static void transform_i420(GstKenburns *kb, const guint8 *src, guint8 *dst) {
-  double xsrc0, ysrc0;
+  FRAC xsrc0, ysrc0;
   int xdst, ydst, xsrc, ysrc;
   int dst_strideY, dst_strideUV, src_strideY, src_strideUV;
   int dst_offsetU, dst_offsetV,  src_offsetU, src_offsetV;
@@ -428,13 +387,13 @@ static void transform_i420(GstKenburns *kb, const guint8 *src, guint8 *dst) {
 
   for(ydst=0; ydst < kb->dst_height; ydst++) {
     for(xdst=0; xdst < kb->dst_width; xdst++) {
-
+  
       TRANSFORM (xsrc0, ysrc0, xdst, ydst);
 
       // We have the position of source image as a float, so convert it
       // to the nearest neighbor.
-      xsrc = (int) floor(xsrc0);
-      ysrc = (int) floor(ysrc0);
+      xsrc = FLOOR_FRAC(xsrc0);
+      ysrc = FLOOR_FRAC(ysrc0);
 
       // check if this pixel is in bounds and if not, then pass the specified
       // background color.

@@ -84,15 +84,6 @@ pylab.plot( numpy.zeros_like(y1), y1, '.-g')
 pylab.plot( z2, y2, '.-r')
 pylab.plot( z3, y3, '.-b')
 
-for xrot in [ 110, 70 ]:
-    thetax = xrot / 180.0 * numpy.pi
-    tan_thetax = numpy.tan(thetax)
-    
-    z3 = z2 * z2 / (z2 + x2 * tan_thetax)
-    x3 = x2 * z2 / (z2 + x2 * tan_thetax)
-    y3 = y2 * z3 / z2
-
-    
 d  =  1200
 xl = -d/2
 yl = -d/2
