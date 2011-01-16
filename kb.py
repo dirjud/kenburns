@@ -5,7 +5,7 @@ gobject.threads_init()
 src = gst.element_factory_make("videotestsrc")
 caps1 = gst.element_factory_make("capsfilter")
 caps1.props.caps = gst.Caps("video/x-raw-yuv,width=1280,height=1280,format=(fourcc)I420,framerate=(fraction)15/1")
-kb = gst.element_factory_make("percieve")
+kb = gst.element_factory_make("kenburns")
 caps2 = gst.element_factory_make("capsfilter")
 caps2.props.caps = gst.Caps("video/x-raw-yuv,width=640,height=480,format=(fourcc)I420,framerate=(fraction)15/1")
 dur = 2*gst.SECOND

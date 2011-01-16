@@ -550,7 +550,7 @@ gst_kenburns_base_init (gpointer g_class)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
 
-  gst_element_class_set_details_simple (element_class, "percieve",
+  gst_element_class_set_details_simple (element_class, "kenburns",
       "Filter/Effect/Video",
       "Kenburnsors video", "David Schleef <ds@schleef.org>");
 
@@ -566,7 +566,7 @@ gst_kenburns_class_init (GstKenburnsClass * klass)
   GObjectClass *gobject_class = (GObjectClass *) klass;
   GstBaseTransformClass *trans_class = (GstBaseTransformClass *) klass;
 
-  GST_DEBUG_CATEGORY_INIT (gst_kenburns_debug, "percieve", 0, "percieve");
+  GST_DEBUG_CATEGORY_INIT (gst_kenburns_debug, "kenburns", 0, "kenburns");
 
   gobject_class->set_property = gst_kenburns_set_property;
   gobject_class->get_property = gst_kenburns_get_property;
@@ -663,7 +663,7 @@ kenburns_init (GstPlugin * kenburns)
   //    0, "Overlay icons on a video stream and optionally have them blink");
   gst_controller_init (NULL, NULL);
 
-  return gst_element_register (kenburns, "percieve", GST_RANK_NONE,
+  return gst_element_register (kenburns, "kenburns", GST_RANK_NONE,
       GST_TYPE_KENBURNS);
 }
 
@@ -675,7 +675,7 @@ kenburns_init (GstPlugin * kenburns)
 GST_PLUGIN_DEFINE (
     GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "precieve",
+    "kenburns",
     "Ken Burns still zoom/crop/pan",
     kenburns_init,
     VERSION,
