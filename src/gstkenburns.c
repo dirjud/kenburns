@@ -269,8 +269,8 @@ gst_kenburns_transform_caps (GstBaseTransform * trans,
   \
   xd0 = DBL2FRAC(0.5) - INT2FRAC(kb->dst_width)/2;			\
   yd0 = DBL2FRAC(0.5) - INT2FRAC(kb->dst_height)/2;			\
-  xs3 = ((FRAC) (wlb * kb->xpos + wsrc / kb->zpos)) / 2;		\
-  ys3 = ((FRAC) (hlb * kb->ypos + hsrc / kb->zpos)) / 2;		\
+  xs3 = ((FRAC) (wsrc * kb->xpos + wsrc / kb->zpos)) / 2;		\
+  ys3 = ((FRAC) (hsrc * kb->ypos + hsrc / kb->zpos)) / 2;		\
   zpos = DBL2FRAC(kb->zpos); \
   \
   /* z1 is the distance is pixels required for the requested fov to see get \
