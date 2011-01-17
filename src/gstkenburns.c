@@ -267,17 +267,34 @@ gst_kenburns_transform_caps (GstBaseTransform * trans,
   if(cos_thetay == 0) { cos_thetay= INC_FROM_ZERO; } \
   tan_thetax_on_cos_thetay = FRAC_DIV(tan_thetax,cos_thetay); \
   \
-  xd0 = DBL2FRAC(0.5) - INT2FRAC(kb->dst_width)/2;			\
-  yd0 = DBL2FRAC(0.5) - INT2FRAC(kb->dst_height)/2;			\
-  xs3 = ((FRAC) (wsrc * kb->xpos + wsrc / kb->zpos)) / 2;		\
-  ys3 = ((FRAC) (hsrc * kb->ypos + hsrc / kb->zpos)) / 2;		\
+  xd0 = DBL2FRAC(0.5 + kb->dst_width  * (kb->xpos/2/kb->zpos - 0.5)); \
+  yd0 = DBL2FRAC(0.5 + kb->dst_height * (kb->ypos/2/kb->zpos - 0.5)); \
+  xs3 = ((FRAC) (wsrc / kb->zpos)) / 2;		\
+  ys3 = ((FRAC) (hsrc / kb->zpos)) / 2;		\
   zpos = DBL2FRAC(kb->zpos); \
   \
   /* z1 is the distance is pixels required for the requested fov to see get \
      the letterbox image perfectly framed.*/ \
   z1 = (FRAC) (((wlb > hlb) ? wlb : hlb) / 2 / tan(kb->fov / 2 / 180 * M_PI));
 
+// This is when no rotation is used, it avoids a lot of calculations and
+// is therefore faster.
+#define TRANSLATE(xsrc, ysrc, xdst, ydst) \
+  {   \
+      FRAC x0, y0;	\
+      \
+      /* translate dest image coordinates to input image coordinates	\
+         (0,0) at the center of the input image */			\
+      x0 = FRAC_MULT ((INT2FRAC (xdst) + xd0 ), zoomx);			\
+      y0 = FRAC_MULT ((INT2FRAC (ydst) + yd0 ), zoomy);			\
+      \
+      /* perform zoom and translation and then translate back to (0,0) in
+         the upper left corner */    \
+      xsrc = FRAC_MULT ((x0 + xs3), zpos);	   \
+      ysrc = FRAC_MULT ((y0 + ys3), zpos);	   \
+  }
 
+// This is what we use when a rotation is requested.
 #define TRANSFORM(xsrc, ysrc, xdst, ydst) \
   {   \
       FRAC x0, y0, x1, y1, x2, y2, z2, x3, y3, det;	\
@@ -315,6 +332,54 @@ gst_kenburns_transform_caps (GstBaseTransform * trans,
    xdst < kb->border || xdst >= kb->dst_width  - kb->border || \
    ydst < kb->border || ydst >= kb->dst_height - kb->border)
 
+#define NEAREST_NEIGHBOR_I420(kb, src, dst) \
+     /* We have the position of source image as a float, so convert it \
+        to the nearest neighbor. */				    \
+      xsrc = FLOOR_FRAC(xsrc0); \
+      ysrc = FLOOR_FRAC(ysrc0); \
+      \
+      /* check if this pixel is in bounds and if not, then pass the specified\
+      // background color. */ \
+      if( OUT_OF_BOUNDS (kb, xsrc, ysrc, xdst, ydst) ) {\
+        /* use provided background color pixel is out of bounds */	\
+	Y = bgcolor[0];\
+	U = bgcolor[1];\
+	V = bgcolor[2];\
+      } else {\
+        /* otherwise copy the nearest neighbor pixel */ \
+	posYsrc = xsrc   + ysrc   * src_strideY;\
+	posUsrc = xsrc/2 + ysrc/2 * src_strideUV + src_offsetU;\
+	posVsrc = xsrc/2 + ysrc/2 * src_strideUV + src_offsetV;\
+	Y = src[posYsrc];\
+	U = src[posUsrc];\
+	V = src[posVsrc];\
+      }\
+      posYdst = xdst   + ydst   * dst_strideY;\
+      posUdst = xdst/2 + ydst/2 * dst_strideUV + dst_offsetU;\
+      posVdst = xdst/2 + ydst/2 * dst_strideUV + dst_offsetV;\
+      dst[posYdst] = Y;\
+      dst[posUdst] = U;\
+      dst[posVdst] = V;
+
+#define NEAREST_NEIGHBOR_AYUV(kb, src, dst) \
+      /* We have the position of source image as a float, so convert it \
+         to the nearest neighbor. */ \
+      xsrc = FLOOR_FRAC(xsrc0);\
+      ysrc = FLOOR_FRAC(ysrc0);\
+      \
+      pos_dst = xdst*4 + ydst * dst_stride;\
+      pos_src = xsrc*4 + ysrc * src_stride;\
+      \
+      /* check if this pixel is in bounds and if not, then pass the specified \
+      background color.*/ \
+      if( OUT_OF_BOUNDS (kb, xsrc, ysrc, xdst, ydst) ) { \
+	/* use transparent black if requesting a pixel that is out of bounds*/ \
+	memcpy(dst + pos_dst, bgcolor, 4); \
+      } else { \
+	/* otherwise copy the nearest neighbor pixel */ \
+	memcpy(dst + pos_dst, src + pos_src, 4);\
+      }
+
 
 static void transform_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
   FRAC xsrc0, ysrc0;
@@ -334,26 +399,18 @@ static void transform_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
   COMP_V (bgcolor[3], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
 
 
-  for(ydst=0; ydst < kb->dst_height; ydst++) {
-    for(xdst=0; xdst < kb->dst_width; xdst++) {
-      TRANSFORM (xsrc0, ysrc0, xdst, ydst);
-
-      // We have the position of source image as a float, so convert it
-      // to the nearest neighbor.
-      xsrc = FLOOR_FRAC(xsrc0);
-      ysrc = FLOOR_FRAC(ysrc0);
-
-      pos_dst = xdst*4 + ydst * dst_stride;
-      pos_src = xsrc*4 + ysrc * src_stride;
-
-      // check if this pixel is in bounds and if not, then pass the specified
-      // background color.
-      if( OUT_OF_BOUNDS (kb, xsrc, ysrc, xdst, ydst) ) {
-	// use transparent black if requesting a pixel that is out of bounds
-	memcpy(dst + pos_dst, bgcolor, 4);
-      } else {
-	// otherwise copy the nearest neighbor pixel
-	memcpy(dst + pos_dst, src + pos_src, 4);
+  if (kb->xrot || kb->yrot || kb->zrot) {
+    for(ydst=0; ydst < kb->dst_height; ydst++) {
+      for(xdst=0; xdst < kb->dst_width; xdst++) {
+	TRANSFORM (xsrc0, ysrc0, xdst, ydst);
+	NEAREST_NEIGHBOR_AYUV(kb, src, dst);
+      }
+    }
+  } else {
+    for(ydst=0; ydst < kb->dst_height; ydst++) {
+      for(xdst=0; xdst < kb->dst_width; xdst++) {
+	TRANSLATE (xsrc0, ysrc0, xdst, ydst);
+	NEAREST_NEIGHBOR_AYUV(kb, src, dst);
       }
     }
   }
@@ -385,38 +442,19 @@ static void transform_i420(GstKenburns *kb, const guint8 *src, guint8 *dst) {
   COMP_U (bgcolor[1], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
   COMP_V (bgcolor[2], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
 
-  for(ydst=0; ydst < kb->dst_height; ydst++) {
-    for(xdst=0; xdst < kb->dst_width; xdst++) {
-  
-      TRANSFORM (xsrc0, ysrc0, xdst, ydst);
-
-      // We have the position of source image as a float, so convert it
-      // to the nearest neighbor.
-      xsrc = FLOOR_FRAC(xsrc0);
-      ysrc = FLOOR_FRAC(ysrc0);
-
-      // check if this pixel is in bounds and if not, then pass the specified
-      // background color.
-      if( OUT_OF_BOUNDS (kb, xsrc, ysrc, xdst, ydst) ) {
-	// use transparent black if requesting a pixel that is out of bounds
-	Y = bgcolor[0];
-	U = bgcolor[1];
-	V = bgcolor[2];
-      } else {
-	// otherwise copy the nearest neighbor pixel
-	posYsrc = xsrc   + ysrc   * src_strideY;
-	posUsrc = xsrc/2 + ysrc/2 * src_strideUV + src_offsetU;
-	posVsrc = xsrc/2 + ysrc/2 * src_strideUV + src_offsetV;
-	Y = src[posYsrc];
-	U = src[posUsrc];
-	V = src[posVsrc];
+  if (kb->xrot || kb->yrot || kb->zrot) {
+    for(ydst=0; ydst < kb->dst_height; ydst++) {
+      for(xdst=0; xdst < kb->dst_width; xdst++) {
+	TRANSFORM (xsrc0, ysrc0, xdst, ydst);
+	NEAREST_NEIGHBOR_I420(kb, src, dst);
       }
-      posYdst = xdst   + ydst   * dst_strideY;
-      posUdst = xdst/2 + ydst/2 * dst_strideUV + dst_offsetU;
-      posVdst = xdst/2 + ydst/2 * dst_strideUV + dst_offsetV;
-      dst[posYdst] = Y;
-      dst[posUdst] = U;
-      dst[posVdst] = V;
+    }
+  } else {
+    for(ydst=0; ydst < kb->dst_height; ydst++) {
+      for(xdst=0; xdst < kb->dst_width; xdst++) {
+	TRANSLATE (xsrc0, ysrc0, xdst, ydst);
+	NEAREST_NEIGHBOR_I420(kb, src, dst);
+      }
     }
   }
 }
@@ -432,7 +470,6 @@ gst_kenburns_transform (GstBaseTransform * trans, GstBuffer * in,
   src = GST_BUFFER_DATA (in);
   dst = GST_BUFFER_DATA (out);
   gst_object_sync_values (G_OBJECT (kb), GST_BUFFER_TIMESTAMP (in));
-
   GST_OBJECT_LOCK (kb);
 
   switch (kb->src_fmt) {
@@ -572,12 +609,12 @@ gst_kenburns_class_init (GstKenburnsClass * klass)
   gobject_class->get_property = gst_kenburns_get_property;
 
   g_object_class_install_property (gobject_class, PROP_XPOS,
-      g_param_spec_double ("xpos", "x viewing position", "x=0.0 corresonds to no x translation. 1.0 corresponds to an x translation of the input image width.",
+      g_param_spec_double ("xpos", "x viewing position", "The center of the output viewing port will be placed at this location on the input image. xpos=0.0 corresonds to the center of the input image and 1.0 corresponds to a translation of half an input image width. So 1.0 will center the output on the right side of the image and -1.0 will center it on the left side.",
 			   -G_MAXDOUBLE, G_MAXDOUBLE, DEFAULT_XPOS,
 			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
 
   g_object_class_install_property (gobject_class, PROP_YPOS,
-      g_param_spec_double ("ypos", "y viewing position", "y=0.0 corresponds to no y translation. 1.0 corresponds to a y translation of the input image height.",
+      g_param_spec_double ("ypos", "y viewing position", "The center of the output viewing port will be placed at this location on the input image. ypos=0.0 corresonds to the center of the input image and 1.0 corresponds to a translation of half an input image width. So 1.0 will center the output on the top side of the image and -1.0 will center it on the bottom side.",
 			   -G_MAXDOUBLE, G_MAXDOUBLE, DEFAULT_YPOS,
 			   G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
 
