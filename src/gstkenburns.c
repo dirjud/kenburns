@@ -1,7 +1,5 @@
 /* GStreamer
- * Copyright (C) <1999> Erik Walthinsen <omega@cse.ogi.edu>
- * Copyright (C) <2003> David Schleef <ds@schleef.org>
- * Copyright (C) <2010> Sebastian Dröge <sebastian.droege@collabora.co.uk>
+ * Copyright (C) <2011> Lane Brooks  <dirjud@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -19,37 +17,35 @@
  * Boston, MA 02111-1307, USA.
  */
 
-/*
- * This file was (probably) generated from gstvideoflip.c,
- * gstvideoflip.c,v 1.7 2003/11/08 02:48:59 dschleef Exp 
- */
 /**
  * SECTION:element-kenburns
  *
- * kenburns is a keyword for the Ken Burns effect
- * (http://en.wikipedia.org/wiki/Ken_burns_effect) named after Ken
- * Burns. It zooms and pans in a slow effect that really pulls focus
- * into the image.
+ * kenburns can be used to do various geometric transform on a video
+ * stream such as zoom, translate, and rotate. The various parameters can
+ * be controlled via GstControllers to create various transition effects,
+ * Ken Burns effects, etc.
  *
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch videotestsrc ! kenburns ! autovideosink
- * ]| This pipeline does the default zoom/pan on the videotestpattern. The
-sharp lines in this test pattern and the nearest neighbor interpolation make
-it look jumpy. A more natural still image that is higher resolution than the
-output will look more smooth.
+ * gst-launch videotestsrc ! kenburns zpos=0.5 ! autovideosink
+ * ]| This pipeline will cut the z position distance of the observer 
+in half to create an effective 2x zoom on the letterboxed input image.
+ *
  * <title<Example with still image</title>
  * |[
- * gst-launch filesrc location=test.jpg ! decodebin2 ! imagefreeze ! kenburns zoom1=0.75 xcenter1=0.75 ycenter1=0.25 zoom2=1.0 xcenter2=0.5 ycenter2=0.5 duration=10000000000 ! video/x-raw-yuv,width=640,height=480 ! autovideosink
- * ]| This will read in a still image called test.jpg, decode it, and pass it 
- * to the imagefreeze element to produce a video stream from the still image.
- * The kenburns element then starts in zoomed into the upper right region and
- * pans out to the entire image over the duration of 10 seconds. The capsfilter
- * at the end causes the kenburns element to resize to the desired output
- * resolution.
+ * gst-launch filesrc location=test.jpg ! decodebin2 ! imagefreeze ! kenburns zoom1=0.75 xpos=0.25 ypos=0.25 zpos=2.0 xrot=45 yrot=45 zrot=45 ! video/x-raw-yuv,width=640,height=480 ! autovideosink
+ * ]| 
+ * This will read in a still image called test.jpg, decode it, and
+ * pass it to the imagefreeze element to produce a video stream from
+ * the still image.  The kenburns element will perform various
+ * transform on the image from there.  The capsfilter at the end
+ * causes the kenburns element to resize to the desired output
+ * resolution.  
+ * 
+ * The real power comes from setting up controllers on the various parameters
+ * to create transitions and Ken Burns effects.
  * </refsect2>
- *
  * 
  */
 
