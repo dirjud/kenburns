@@ -124,18 +124,33 @@ static GstStaticPadTemplate gst_kenburns_src_template =
     GST_STATIC_PAD_TEMPLATE ("src",
     GST_PAD_SRC,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS(
-		    GST_VIDEO_CAPS_YUV("{AYUV, I420}") ";"
-    )
-    );
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_YUV("{AYUV, I420}") ";"
+		     GST_VIDEO_CAPS_BGRA ";"
+		     GST_VIDEO_CAPS_ARGB ";" 
+		     GST_VIDEO_CAPS_RGBA ";" 
+		     GST_VIDEO_CAPS_ABGR ";"
+		     GST_VIDEO_CAPS_BGR  ";" 
+		     GST_VIDEO_CAPS_xRGB ";" 
+		     GST_VIDEO_CAPS_xBGR ";"
+		     GST_VIDEO_CAPS_RGBx ";" 
+		     GST_VIDEO_CAPS_BGRx)
+  );
 
 static GstStaticPadTemplate gst_kenburns_sink_template =
     GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS (GST_VIDEO_CAPS_YUV ("{AYUV, I420}") ";"
-    )
-    );
+		     GST_VIDEO_CAPS_BGRA ";"
+		     GST_VIDEO_CAPS_ARGB ";" 
+		     GST_VIDEO_CAPS_RGBA ";" 
+		     GST_VIDEO_CAPS_ABGR ";"
+		     GST_VIDEO_CAPS_BGR  ";" 
+		     GST_VIDEO_CAPS_xRGB ";" 
+		     GST_VIDEO_CAPS_xBGR ";"
+		     GST_VIDEO_CAPS_RGBx ";" 
+		     GST_VIDEO_CAPS_BGRx)
+  );
 
 GST_BOILERPLATE (GstKenburns, gst_kenburns, GstVideoFilter,
     GST_TYPE_VIDEO_FILTER);
@@ -357,62 +372,86 @@ gst_kenburns_transform_caps (GstBaseTransform * trans,
       dst[posUdst] = U;\
       dst[posVdst] = V;
 
-#define NEAREST_NEIGHBOR_AYUV(kb, src, dst) \
+#define NEAREST_NEIGHBOR(kb, src, dst, num_bytes)					\
       /* We have the position of source image as a float, so convert it \
          to the nearest neighbor. */ \
       xsrc = FLOOR_FRAC(xsrc0);\
       ysrc = FLOOR_FRAC(ysrc0);\
       \
-      pos_dst = xdst*4 + ydst * dst_stride;\
-      pos_src = xsrc*4 + ysrc * src_stride;\
+      pos_dst = xdst*num_bytes + ydst * dst_stride;\
+      pos_src = xsrc*num_bytes + ysrc * src_stride;\
       \
       /* check if this pixel is in bounds and if not, then pass the specified \
       background color.*/ \
       if( OUT_OF_BOUNDS (kb, xsrc, ysrc, xdst, ydst) ) { \
 	/* use transparent black if requesting a pixel that is out of bounds*/ \
-	memcpy(dst + pos_dst, bgcolor, 4); \
+	memcpy(dst + pos_dst, bgcolor, num_bytes); \
       } else { \
 	/* otherwise copy the nearest neighbor pixel */ \
-	memcpy(dst + pos_dst, src + pos_src, 4);\
+	memcpy(dst + pos_dst, src + pos_src, num_bytes);\
       }
 
 
-static void transform_ayuv(GstKenburns *kb,const guint8 *src,guint8 *dst) {
+static void transform_XXXX(GstKenburns *kb, const guint8 *src, guint8 *dst, 
+			   guint8 *bgcolor) {
   FRAC xsrc0, ysrc0;
   int xdst, ydst, xsrc, ysrc;
   int pos_dst, pos_src;
   int dst_stride, src_stride; 
-  guint8 bgcolor[4]; // background color
 
   dst_stride = gst_video_format_get_row_stride(kb->dst_fmt, 0, kb->dst_width);
   src_stride = gst_video_format_get_row_stride(kb->src_fmt, 0, kb->src_width);
 
   TRANSFORM_SETUP(kb);
 
-  bgcolor[0] = kb->bgcolor[BG_ALPHA];
-  COMP_Y (bgcolor[1], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
-  COMP_U (bgcolor[2], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
-  COMP_V (bgcolor[3], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
-
-
   if (kb->xrot || kb->yrot || kb->zrot) {
     for(ydst=0; ydst < kb->dst_height; ydst++) {
       for(xdst=0; xdst < kb->dst_width; xdst++) {
 	TRANSFORM (xsrc0, ysrc0, xdst, ydst);
-	NEAREST_NEIGHBOR_AYUV(kb, src, dst);
+	NEAREST_NEIGHBOR(kb, src, dst, 4);
       }
     }
   } else {
     for(ydst=0; ydst < kb->dst_height; ydst++) {
       for(xdst=0; xdst < kb->dst_width; xdst++) {
 	TRANSLATE (xsrc0, ysrc0, xdst, ydst);
-	NEAREST_NEIGHBOR_AYUV(kb, src, dst);
+	NEAREST_NEIGHBOR(kb, src, dst, 4);
       }
     }
   }
 }
 
-static void transform_i420(GstKenburns *kb, const guint8 *src, guint8 *dst) {
+static void transform_XXX(GstKenburns *kb, const guint8 *src, guint8 *dst, 
+			  guint8 *bgcolor) {
+  FRAC xsrc0, ysrc0;
+  int xdst, ydst, xsrc, ysrc;
+  int pos_dst, pos_src;
+  int dst_stride, src_stride; 
+
+  dst_stride = gst_video_format_get_row_stride(kb->dst_fmt, 0, kb->dst_width);
+  src_stride = gst_video_format_get_row_stride(kb->src_fmt, 0, kb->src_width);
+
+  TRANSFORM_SETUP(kb);
+
+  if (kb->xrot || kb->yrot || kb->zrot) {
+    for(ydst=0; ydst < kb->dst_height; ydst++) {
+      for(xdst=0; xdst < kb->dst_width; xdst++) {
+	TRANSFORM (xsrc0, ysrc0, xdst, ydst);
+	NEAREST_NEIGHBOR(kb, src, dst, 3);
+      }
+    }
+  } else {
+    for(ydst=0; ydst < kb->dst_height; ydst++) {
+      for(xdst=0; xdst < kb->dst_width; xdst++) {
+	TRANSLATE (xsrc0, ysrc0, xdst, ydst);
+	NEAREST_NEIGHBOR(kb, src, dst, 3);
+      }
+    }
+  }
+}
+
+static void transform_i420(GstKenburns *kb, const guint8 *src, guint8 *dst,
+			   guint8 *bgcolor) {
   FRAC xsrc0, ysrc0;
   int xdst, ydst, xsrc, ysrc;
   int dst_strideY, dst_strideUV, src_strideY, src_strideUV;
@@ -420,7 +459,6 @@ static void transform_i420(GstKenburns *kb, const guint8 *src, guint8 *dst) {
   int posYdst, posUdst, posVdst;
   int posYsrc, posUsrc, posVsrc;
   int Y, U, V;
-  guint8 bgcolor[3]; // background color
 
   dst_strideY  = gst_video_format_get_row_stride(kb->dst_fmt, 0, kb->dst_width);
   dst_strideUV = gst_video_format_get_row_stride(kb->dst_fmt, 1, kb->dst_width);
@@ -433,10 +471,6 @@ static void transform_i420(GstKenburns *kb, const guint8 *src, guint8 *dst) {
   src_offsetV = gst_video_format_get_component_offset(kb->src_fmt, 2, kb->src_width, kb->src_height);
 
   TRANSFORM_SETUP(kb);
-
-  COMP_Y (bgcolor[0], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
-  COMP_U (bgcolor[1], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
-  COMP_V (bgcolor[2], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
 
   if (kb->xrot || kb->yrot || kb->zrot) {
     for(ydst=0; ydst < kb->dst_height; ydst++) {
@@ -462,6 +496,7 @@ gst_kenburns_transform (GstBaseTransform * trans, GstBuffer * in,
   GstKenburns *kb = GST_KENBURNS (trans);
   guint8 *dst;
   const guint8 *src;
+  guint8 bgcolor[4]; // background color
 
   src = GST_BUFFER_DATA (in);
   dst = GST_BUFFER_DATA (out);
@@ -470,10 +505,55 @@ gst_kenburns_transform (GstBaseTransform * trans, GstBuffer * in,
 
   switch (kb->src_fmt) {
   case GST_VIDEO_FORMAT_I420:
-    transform_i420(kb, src, dst);
+    COMP_Y (bgcolor[0], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+    COMP_U (bgcolor[1], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+    COMP_V (bgcolor[2], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+    transform_i420(kb, src, dst, bgcolor);
     break;
   case GST_VIDEO_FORMAT_AYUV:
-    transform_ayuv(kb, src, dst);
+    bgcolor[0] = kb->bgcolor[BG_ALPHA];
+    COMP_Y (bgcolor[1], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+    COMP_U (bgcolor[2], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+    COMP_V (bgcolor[3], kb->bgcolor[BG_RED], kb->bgcolor[BG_GREEN], kb->bgcolor[BG_BLUE]);
+    transform_XXXX(kb, src, dst, bgcolor);
+    break;
+  case GST_VIDEO_FORMAT_ARGB:
+  case GST_VIDEO_FORMAT_xRGB:
+    bgcolor[0] = kb->bgcolor[BG_ALPHA];
+    bgcolor[1] = kb->bgcolor[BG_RED];
+    bgcolor[2] = kb->bgcolor[BG_GREEN];
+    bgcolor[3] = kb->bgcolor[BG_BLUE];
+    transform_XXXX(kb, src, dst, bgcolor);
+    break;
+  case GST_VIDEO_FORMAT_ABGR:
+  case GST_VIDEO_FORMAT_xBGR:
+    bgcolor[0] = kb->bgcolor[BG_ALPHA];
+    bgcolor[1] = kb->bgcolor[BG_BLUE];
+    bgcolor[2] = kb->bgcolor[BG_GREEN];
+    bgcolor[3] = kb->bgcolor[BG_RED];
+    transform_XXXX(kb, src, dst, bgcolor);
+    break;
+  case GST_VIDEO_FORMAT_BGRA:
+  case GST_VIDEO_FORMAT_BGRx:
+    bgcolor[0] = kb->bgcolor[BG_BLUE];
+    bgcolor[1] = kb->bgcolor[BG_GREEN];
+    bgcolor[2] = kb->bgcolor[BG_RED];
+    bgcolor[3] = kb->bgcolor[BG_ALPHA];
+    transform_XXXX(kb, src, dst, bgcolor);
+    break;
+  case GST_VIDEO_FORMAT_RGBA:
+  case GST_VIDEO_FORMAT_RGBx:
+    bgcolor[0] = kb->bgcolor[BG_RED];
+    bgcolor[1] = kb->bgcolor[BG_GREEN];
+    bgcolor[2] = kb->bgcolor[BG_BLUE];
+    bgcolor[3] = kb->bgcolor[BG_ALPHA];
+    transform_XXXX(kb, src, dst, bgcolor);
+    break;
+  case GST_VIDEO_FORMAT_BGR:
+    bgcolor[0] = kb->bgcolor[BG_RED];
+    bgcolor[1] = kb->bgcolor[BG_GREEN];
+    bgcolor[2] = kb->bgcolor[BG_RED];
+    transform_XXX(kb, src, dst, bgcolor);
     break;
   default:
     break;
